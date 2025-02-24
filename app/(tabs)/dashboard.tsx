@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { useReadingList } from '../../contexts/reading-list';
 import { useAppLock } from '../../contexts/app-lock';
+import { useTheme } from '../../contexts/theme';
 import ReadingList from '../components/ReadingList';
 import { useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function DashboardScreen() {
   const { books } = useReadingList();
   const { readingProgress, requiredMinutes } = useAppLock();
+  const { isDarkMode } = useTheme();
   const remainingMinutes = Math.max(0, requiredMinutes - readingProgress);
 
   // Debug: Check what books are in storage
@@ -27,24 +29,57 @@ export default function DashboardScreen() {
   }, [books]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Dashboard</Text>
+    <SafeAreaView 
+      style={[
+        styles.container, 
+        { backgroundColor: isDarkMode ? '#000' : '#fff' }
+      ]} 
+      edges={['top']}
+    >
+      <View style={[
+        styles.header,
+        { 
+          borderBottomColor: isDarkMode ? '#333' : '#eee',
+          backgroundColor: isDarkMode ? '#1c1c1e' : '#fff'
+        }
+      ]}>
+        <Text style={[
+          styles.title,
+          { color: isDarkMode ? '#fff' : '#000' }
+        ]}>Dashboard</Text>
         <Link href="/settings" style={styles.settingsLink}>
           Settings
         </Link>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView 
+        style={[
+          styles.content,
+          { backgroundColor: isDarkMode ? '#000' : '#f2f2f7' }
+        ]} 
+        contentContainerStyle={styles.contentContainer}
+      >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Today's Reading Goal</Text>
-          <View style={styles.statsContainer}>
+          <Text style={[
+            styles.sectionTitle,
+            { color: isDarkMode ? '#fff' : '#000' }
+          ]}>Today's Reading Goal</Text>
+          <View style={[
+            styles.statsContainer,
+            { backgroundColor: isDarkMode ? '#1c1c1e' : '#f8f9fa' }
+          ]}>
             <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Reading Progress</Text>
+              <Text style={[
+                styles.statLabel,
+                { color: isDarkMode ? '#999' : '#666' }
+              ]}>Reading Progress</Text>
               <Text style={styles.statValue}>{readingProgress} min</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Remaining</Text>
+              <Text style={[
+                styles.statLabel,
+                { color: isDarkMode ? '#999' : '#666' }
+              ]}>Remaining</Text>
               <Text style={styles.statValue}>{remainingMinutes} min</Text>
             </View>
           </View>
@@ -57,13 +92,22 @@ export default function DashboardScreen() {
         </Link>
 
         <View style={[styles.section, styles.readingListSection]}>
-          <Text style={styles.sectionTitle}>My Reading List</Text>
+          <Text style={[
+            styles.sectionTitle,
+            { color: isDarkMode ? '#fff' : '#000' }
+          ]}>My Reading List</Text>
           <ReadingList compact />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Locked Apps</Text>
-          <Text style={styles.emptyText}>No apps locked yet</Text>
+          <Text style={[
+            styles.sectionTitle,
+            { color: isDarkMode ? '#fff' : '#000' }
+          ]}>Locked Apps</Text>
+          <Text style={[
+            styles.emptyText,
+            { color: isDarkMode ? '#999' : '#666' }
+          ]}>No apps locked yet</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -73,7 +117,6 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -81,7 +124,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   title: {
     fontSize: 24,
@@ -108,13 +150,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#000',
     marginBottom: 8,
   },
   statsContainer: {
     flexDirection: 'row',
     padding: 16,
-    backgroundColor: '#f8f9fa',
     borderRadius: 12,
   },
   statItem: {
@@ -122,7 +162,6 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
   },
   statValue: {
     fontSize: 20,
@@ -141,7 +180,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptyText: {
-    color: '#666',
     fontSize: 14,
   },
 }); 

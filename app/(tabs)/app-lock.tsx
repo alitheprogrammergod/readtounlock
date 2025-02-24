@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppLock } from '../../contexts/app-lock';
+import { useTheme } from '../../contexts/theme';
 import { appManager } from '../../services/app-manager';
 
 export default function AppLockScreen() {
@@ -25,6 +26,7 @@ export default function AppLockScreen() {
     setRequiredMinutes,
     readingProgress,
   } = useAppLock();
+  const { isDarkMode } = useTheme();
 
   const [hasPermissions, setHasPermissions] = useState(false);
   const [isCustomTimeModalVisible, setCustomTimeModalVisible] = useState(false);
@@ -120,43 +122,58 @@ export default function AppLockScreen() {
   const hasLockedApps = apps.some(app => app.isLocked);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[
+      styles.container,
+      { backgroundColor: isDarkMode ? '#000' : '#f2f2f7' }
+    ]}>
       <ScrollView style={styles.scrollView}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Lock Apps</Text>
+        <View style={[
+          styles.header,
+          { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
+        ]}>
+          <Text style={[
+            styles.title,
+            { color: isDarkMode ? '#fff' : '#000' }
+          ]}>Lock Apps</Text>
           <Pressable onPress={handleHelp} style={styles.helpButton}>
             <Ionicons name="help-circle-outline" size={24} color="#007AFF" />
           </Pressable>
         </View>
 
-        <View style={styles.statsContainer}>
+        <View style={[
+          styles.statsContainer,
+          { backgroundColor: isDarkMode ? '#1c1c1e' : '#f8f9fa' }
+        ]}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Reading Progress</Text>
+            <Text style={[
+              styles.statLabel,
+              { color: isDarkMode ? '#999' : '#666' }
+            ]}>Reading Progress</Text>
             <Text style={styles.statValue}>{readingProgress} min</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Remaining</Text>
+            <Text style={[
+              styles.statLabel,
+              { color: isDarkMode ? '#999' : '#666' }
+            ]}>Remaining</Text>
             <Text style={styles.statValue}>{remainingMinutes} min</Text>
           </View>
         </View>
 
         {hasLockedApps && (
-          <View style={styles.timeRequirementContainer}>
-            <Text style={styles.timeRequirementLabel}>Reading Time Required</Text>
+          <View style={[
+            styles.timeRequirementContainer,
+            { backgroundColor: isDarkMode ? '#1c1c1e' : '#f8f9fa' }
+          ]}>
+            <Text style={[
+              styles.timeRequirementLabel,
+              { color: isDarkMode ? '#fff' : '#000' }
+            ]}>Reading Time Required</Text>
             <View style={styles.timeControl}>
-              <Pressable
-                onPress={() => handleUpdateMinutes(requiredMinutes - 15)}
-                style={styles.timeButton}
-              >
-                <Text style={styles.timeButtonText}>-15</Text>
-              </Pressable>
-              <Text style={styles.timeValue}>{requiredMinutes} min</Text>
-              <Pressable
-                onPress={() => handleUpdateMinutes(requiredMinutes + 15)}
-                style={styles.timeButton}
-              >
-                <Text style={styles.timeButtonText}>+15</Text>
-              </Pressable>
+              <Text style={[
+                styles.timeValue,
+                { color: isDarkMode ? '#fff' : '#000' }
+              ]}>{requiredMinutes} min</Text>
             </View>
             <Pressable
               onPress={handleCustomTime}
@@ -167,7 +184,10 @@ export default function AppLockScreen() {
           </View>
         )}
 
-        <Text style={styles.description}>
+        <Text style={[
+          styles.description,
+          { color: isDarkMode ? '#999' : '#666' }
+        ]}>
           Lock apps and set a reading requirement. All apps will unlock when you complete your reading goal.
         </Text>
 
@@ -183,12 +203,25 @@ export default function AppLockScreen() {
           </View>
         )}
 
-        <View style={styles.appList}>
+        <View style={[
+          styles.appList,
+          { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
+        ]}>
           {apps.map((app) => (
-            <View key={app.id} style={styles.appItem}>
+            <View key={app.id} style={[
+              styles.appItem,
+              { borderBottomColor: isDarkMode ? '#333' : '#eee' }
+            ]}>
               <View style={styles.appInfo}>
-                <Ionicons name={app.icon as any} size={24} color="#666" />
-                <Text style={styles.appName}>{app.name}</Text>
+                <Ionicons 
+                  name={app.icon as any} 
+                  size={24} 
+                  color={isDarkMode ? '#fff' : '#666'} 
+                />
+                <Text style={[
+                  styles.appName,
+                  { color: isDarkMode ? '#fff' : '#000' }
+                ]}>{app.name}</Text>
               </View>
               
               <Switch
@@ -212,22 +245,43 @@ export default function AppLockScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalContainer}
         >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Set Custom Time</Text>
+          <View style={[
+            styles.modalContent,
+            { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
+          ]}>
+            <Text style={[
+              styles.modalTitle,
+              { color: isDarkMode ? '#fff' : '#000' }
+            ]}>Set Custom Time</Text>
             <TextInput
-              style={styles.timeInput}
+              style={[
+                styles.timeInput,
+                { 
+                  borderColor: isDarkMode ? '#333' : '#ddd',
+                  backgroundColor: isDarkMode ? '#000' : '#fff',
+                  color: isDarkMode ? '#fff' : '#000'
+                }
+              ]}
               keyboardType="numeric"
               value={customTimeInput}
               onChangeText={setCustomTimeInput}
               placeholder="Enter minutes"
+              placeholderTextColor={isDarkMode ? '#666' : '#999'}
               autoFocus
             />
             <View style={styles.modalButtons}>
               <Pressable
                 onPress={() => setCustomTimeModalVisible(false)}
-                style={[styles.modalButton, styles.cancelButton]}
+                style={[
+                  styles.modalButton,
+                  styles.cancelButton,
+                  { backgroundColor: isDarkMode ? '#333' : '#f8f9fa' }
+                ]}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={[
+                  styles.cancelButtonText,
+                  { color: isDarkMode ? '#fff' : '#666' }
+                ]}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSetCustomTime}
@@ -246,7 +300,6 @@ export default function AppLockScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   scrollView: {
     flex: 1,
@@ -304,9 +357,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   timeControl: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  timeValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#007AFF',
   },
   timeButton: {
     backgroundColor: '#007AFF',
@@ -314,17 +372,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
+  customTimeButton: {
+    marginTop: 12,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   timeButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  timeValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginHorizontal: 16,
-    minWidth: 60,
-    textAlign: 'center',
   },
   permissionWarning: {
     flexDirection: 'row',
@@ -363,12 +420,6 @@ const styles = StyleSheet.create({
   appName: {
     marginLeft: 12,
     fontSize: 16,
-  },
-  customTimeButton: {
-    marginTop: 12,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalContainer: {
     flex: 1,

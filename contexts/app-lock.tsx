@@ -14,6 +14,7 @@ interface AppLockContextType {
   isAppLocked: (id: string) => boolean;
   totalRequiredMinutes: number;
   readingProgress: number;
+  addReadingTime: (minutes: number) => Promise<void>;
 }
 
 const AppLockContext = createContext<AppLockContextType | undefined>(undefined);
@@ -104,6 +105,9 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
         isAppLocked,
         totalRequiredMinutes,
         readingProgress,
+        addReadingTime: async (minutes: number) => {
+          // Implementation of addReadingTime function
+        },
       }}
     >
       {children}
