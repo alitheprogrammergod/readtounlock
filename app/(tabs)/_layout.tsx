@@ -15,6 +15,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="app-lock"
+        options={{
+          title: 'App Lock',
+          tabBarIcon: ({ color }) => <Ionicons name="lock-closed" size={24} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

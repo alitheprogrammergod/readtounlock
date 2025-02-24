@@ -10,8 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.readtounlock",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to scan book pages for reading verification."
+        "NSCameraUsageDescription": "This app uses the camera to scan book pages for reading verification.",
+        "NSUserNotificationUsageDescription": "We'll notify you when your apps unlock and send reading reminders.",
+        "NSFamilyControlsUsageDescription": "This app needs access to Family Controls to manage app restrictions based on your reading goals.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.family-controls": true
       }
     },
     "android": {
@@ -19,7 +26,16 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA",
+        "NOTIFICATIONS",
+        "VIBRATE",
+        "PACKAGE_USAGE_STATS",
+        "BIND_ACCESSIBILITY_SERVICE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.readtounlock"
     },
     "web": {
       "bundler": "metro",
@@ -42,10 +58,25 @@
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan book pages."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/adaptive-icon.png",
+          "color": "#ffffff"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "0b0a1bfb-dec8-4096-80b4-561692b83151"
+      }
     }
   }
 }

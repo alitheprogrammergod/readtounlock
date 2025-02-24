@@ -3,8 +3,18 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useReadingList } from '../../contexts/reading-list';
+import { appManager } from '../../services/app-manager';
 import { Ionicons } from '@expo/vector-icons';
 import BookPlaceholder from '../components/BookPlaceholder';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const READING_SESSION_KEY = '@reading_session';
+
+interface ReadingSession {
+  bookId: string;
+  startTime: string;
+  elapsedTime: number;
+}
 
 export default function ReadScreen() {
   const { id } = useLocalSearchParams();
@@ -20,12 +30,34 @@ export default function ReadScreen() {
   const pageInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Load saved session on mount
+  useEffect(() => {
+    loadSession();
+  }, []);
+
+  // Save session when unmounting or navigating away
+  useEffect(() => {
+    return () => {
+      if (isReading) {
+        saveSession();
+      }
+    };
+  }, [isReading, elapsedTime]);
+
+  // Timer effect
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
     if (isReading) {
       interval = setInterval(() => {
-        setElapsedTime(prev => prev + 1);
+        setElapsedTime(prev => {
+          const newTime = prev + 1;
+          // Update reading progress every minute
+          if (newTime % 60 === 0) {
+            appManager.addReadingTime(1);
+          }
+          return newTime;
+        });
       }, 1000);
     }
 
@@ -34,16 +66,50 @@ export default function ReadScreen() {
     };
   }, [isReading]);
 
+  const loadSession = async () => {
+    try {
+      const sessionJson = await AsyncStorage.getItem(READING_SESSION_KEY);
+      if (sessionJson) {
+        const session: ReadingSession = JSON.parse(sessionJson);
+        if (session.bookId === id) {
+          setElapsedTime(session.elapsedTime);
+          setStartTime(new Date(session.startTime));
+          setIsReading(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading reading session:', error);
+    }
+  };
+
+  const saveSession = async () => {
+    if (!startTime) return;
+    
+    try {
+      const session: ReadingSession = {
+        bookId: id as string,
+        startTime: startTime.toISOString(),
+        elapsedTime,
+      };
+      await AsyncStorage.setItem(READING_SESSION_KEY, JSON.stringify(session));
+    } catch (error) {
+      console.error('Error saving reading session:', error);
+    }
+  };
+
   const handleStartReading = useCallback(() => {
     setStartTime(new Date());
     setIsReading(true);
   }, []);
 
-  const handleStopReading = useCallback(() => {
+  const handleStopReading = useCallback(async () => {
     if (!book) return;
     setIsReading(false);
     setShowPagePrompt(true);
     setTempPage(currentPage.toString());
+    
+    // Clear the saved session
+    await AsyncStorage.removeItem(READING_SESSION_KEY);
     
     // Scroll to the input after a short delay to ensure layout is complete
     setTimeout(() => {

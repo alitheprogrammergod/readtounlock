@@ -1,0 +1,4 @@
+module FamilyControlsModule {
+    header "FamilyControlsModule.h"
+    export *
+} 
