@@ -2,14 +2,15 @@ import { StyleSheet, View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { useReadingList } from '../../contexts/reading-list';
+import { useAppLock } from '../../contexts/app-lock';
 import ReadingList from '../components/ReadingList';
 import { useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function DashboardScreen() {
   const { books } = useReadingList();
-  const totalMinutesRead = books?.reduce((total, book) => total + book.progress.totalTimeRead, 0) || 0;
-  const dailyGoalMinutes = 30; // TODO: Make this configurable
+  const { readingProgress, requiredMinutes } = useAppLock();
+  const remainingMinutes = Math.max(0, requiredMinutes - readingProgress);
 
   // Debug: Check what books are in storage
   useEffect(() => {
@@ -37,9 +38,16 @@ export default function DashboardScreen() {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Today's Reading Goal</Text>
-          <Text style={styles.goalText}>
-            {totalMinutesRead} / {dailyGoalMinutes} minutes
-          </Text>
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Reading Progress</Text>
+              <Text style={styles.statValue}>{readingProgress} min</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Remaining</Text>
+              <Text style={styles.statValue}>{remainingMinutes} min</Text>
+            </View>
+          </View>
         </View>
 
         <Link href="/(book)/scan" asChild>
@@ -95,15 +103,30 @@ const styles = StyleSheet.create({
   },
   readingListSection: {
     flex: 1,
-    minHeight: 200, // Ensure there's space for the reading list
+    minHeight: 200,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '500',
     color: '#000',
+    marginBottom: 8,
   },
-  goalText: {
-    fontSize: 24,
+  statsContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+  },
+  statItem: {
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
     color: '#007AFF',
   },
   scanButton: {

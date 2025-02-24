@@ -17,7 +17,7 @@ Read to Unlock is an app that encourages reading by requiring users to complete 
 - [x] Set up safe area handling using SafeAreaView
 - [x] Test basic navigation flow
 
-### Phase 2: Core Reading Features
+### Phase 2: Core Reading Features 🚧
 - [x] Implement camera functionality for physical book scanning
   - Added camera permissions ✅
   - Implemented camera preview ✅
@@ -31,17 +31,22 @@ Read to Unlock is an app that encourages reading by requiring users to complete 
     5. Implemented ISBN barcode scanning
     6. Added book details display from Google Books API
 
-- [ ] Implement Reading List Management
-  - Add reading list storage
-  - Create reading list UI
-  - Implement book progress tracking
-  - Add reading session timer
-  - Create reading statistics
+- [x] Implement Reading List Management
+  - Added reading list storage using AsyncStorage ✅
+  - Created reading list UI with book cards ✅
+  - Implemented book progress tracking ✅
+  - Added reading session timer ✅
+  - Created reading statistics display ✅
 
-- [ ] Create reading timer component
-  - Build countdown timer
-  - Add progress tracking
-  - Implement persistence
+- [x] Create reading timer component
+  - Built countdown timer ✅
+  - Added progress tracking ✅
+  - Implemented session persistence ✅
+  - Fixed timer issues:
+    1. Updated timer logic to use useRef
+    2. Added proper cleanup
+    3. Fixed continuous running issues
+    4. Added session state persistence
 
 - [ ] Develop page verification system
   - Implement OCR processing
@@ -53,11 +58,14 @@ Read to Unlock is an app that encourages reading by requiring users to complete 
   - Statistics calculation
   - Progress visualization
 
-### Phase 3: App Locking System
-- [ ] Create app selection interface
-- [ ] Implement app locking mechanism
+### Phase 3: App Locking System 🚧
+- [x] Create app selection interface
+- [x] Implement app locking mechanism
+  - Added iOS FamilyControls integration ✅
+  - Added Android accessibility service ✅
+  - Created app manager service ✅
 - [ ] Develop unlock conditions
-- [ ] Build daily goal setting
+- [x] Build daily goal setting
 - [ ] Test locking/unlocking flow
 
 ### Phase 4: User Features
@@ -83,9 +91,15 @@ Read to Unlock is an app that encourages reading by requiring users to complete 
 
 ## Current Status
 ✅ Completed Phase 1: Basic navigation and UI structure
-🚧 Working on Phase 2: Core Reading Features
-  - Completed: Camera integration and barcode scanning
-  - Next: Implementing reading list management
+🚧 Working on Phase 2 & 3: Core Reading Features and App Locking
+  - Completed: Camera integration, barcode scanning, reading list management
+  - Completed: Basic app locking mechanism
+  - Next: Implement page verification system and complete unlock conditions
+
+## Known Issues
+1. Timer occasionally stops after one second (investigating)
+2. Need to improve session persistence
+3. Need to add proper error handling for book lookup failures
 
 ## Dependencies
 Current working dependencies from package.json:
@@ -93,15 +107,18 @@ Current working dependencies from package.json:
 {
   "dependencies": {
     "@expo/vector-icons": "^14.0.2",
+    "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",
-    "expo": "~52.0.37",
+    "expo": "~52.0.0",
     "expo-blur": "~14.0.3",
     "expo-camera": "~16.0.3",
     "expo-constants": "~17.0.7",
+    "expo-dev-client": "~5.0.12",
     "expo-font": "~13.0.4",
     "expo-haptics": "~14.0.1",
     "expo-linking": "~7.0.5",
+    "expo-notifications": "~0.29.13",
     "expo-router": "~4.0.17",
     "expo-splash-screen": "~0.29.22",
     "expo-status-bar": "~2.0.1",
@@ -116,6 +133,7 @@ Current working dependencies from package.json:
     "react-native-reanimated": "~3.16.1",
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0",
+    "react-native-svg": "^15.11.1",
     "react-native-web": "~0.19.13",
     "react-native-webview": "13.12.5"
   }
@@ -138,6 +156,7 @@ Current working dependencies from package.json:
 - Regular commits should be made for easy rollback if needed
 
 ## Next Steps
-1. Resolve camera integration TypeScript issues
-2. Implement camera preview
-3. Add text recognition capabilities 
+1. Fix timer persistence issues
+2. Implement OCR for page verification
+3. Complete app locking/unlocking flow
+4. Add proper error handling and loading states 

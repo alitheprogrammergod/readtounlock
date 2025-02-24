@@ -7,6 +7,8 @@ import { appManager } from '../../services/app-manager';
 import { Ionicons } from '@expo/vector-icons';
 import BookPlaceholder from '../components/BookPlaceholder';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Circle } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 
 const READING_SESSION_KEY = '@reading_session';
 
@@ -14,14 +16,17 @@ interface ReadingSession {
   bookId: string;
   startTime: string;
   elapsedTime: number;
+  isPaused: boolean;
 }
 
 export default function ReadScreen() {
   const { id } = useLocalSearchParams();
   const { books, updateProgress } = useReadingList();
   const book = books.find(b => b.id === id);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const [isReading, setIsReading] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentPage, setCurrentPage] = useState(book?.progress.currentPage || 0);
   const [startTime, setStartTime] = useState<Date | null>(null);
@@ -42,17 +47,23 @@ export default function ReadScreen() {
         saveSession();
       }
     };
-  }, [isReading, elapsedTime]);
+  }, [isReading]);
 
   // Timer effect
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    if (isReading) {
-      interval = setInterval(() => {
+    // Clear any existing interval first
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // Only start a new interval if we're reading and not paused
+    if (isReading && !isPaused) {
+      console.log('Starting timer...');
+      intervalRef.current = setInterval(() => {
+        console.log('Timer tick');
         setElapsedTime(prev => {
           const newTime = prev + 1;
-          // Update reading progress every minute
           if (newTime % 60 === 0) {
             appManager.addReadingTime(1);
           }
@@ -62,9 +73,13 @@ export default function ReadScreen() {
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (intervalRef.current) {
+        console.log('Cleaning up timer');
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [isReading]);
+  }, [isReading, isPaused]);
 
   const loadSession = async () => {
     try {
@@ -75,6 +90,7 @@ export default function ReadScreen() {
           setElapsedTime(session.elapsedTime);
           setStartTime(new Date(session.startTime));
           setIsReading(true);
+          setIsPaused(session.isPaused);
         }
       }
     } catch (error) {
@@ -90,6 +106,7 @@ export default function ReadScreen() {
         bookId: id as string,
         startTime: startTime.toISOString(),
         elapsedTime,
+        isPaused,
       };
       await AsyncStorage.setItem(READING_SESSION_KEY, JSON.stringify(session));
     } catch (error) {
@@ -98,20 +115,38 @@ export default function ReadScreen() {
   };
 
   const handleStartReading = useCallback(() => {
+    console.log('Starting reading session');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setStartTime(new Date());
     setIsReading(true);
+    setIsPaused(false);
   }, []);
+
+  const handlePauseReading = useCallback(async () => {
+    console.log('Pausing reading session');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsPaused(true);
+  }, []);
+
+  const handleResumeReading = useCallback(() => {
+    console.log('Resuming reading session');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!startTime) {
+      setStartTime(new Date());
+    }
+    setIsPaused(false);
+  }, [startTime]);
 
   const handleStopReading = useCallback(async () => {
     if (!book) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsReading(false);
+    setIsPaused(false);
     setShowPagePrompt(true);
     setTempPage(currentPage.toString());
     
-    // Clear the saved session
     await AsyncStorage.removeItem(READING_SESSION_KEY);
     
-    // Scroll to the input after a short delay to ensure layout is complete
     setTimeout(() => {
       scrollViewRef.current?.scrollTo({ y: 400, animated: true });
       pageInputRef.current?.focus();
@@ -138,6 +173,11 @@ export default function ReadScreen() {
     }
   }, [book, tempPage, currentPage, elapsedTime, updateProgress]);
 
+  // Calculate progress percentage
+  const progressPercentage = book ? (currentPage / book.pageCount) * 100 : 0;
+  const CIRCLE_LENGTH = 280; // Circumference of progress circle
+  const CIRCLE_RADIUS = CIRCLE_LENGTH / (2 * Math.PI);
+
   if (!book) {
     return (
       <SafeAreaView style={styles.container}>
@@ -156,7 +196,8 @@ export default function ReadScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>← Back</Text>
+          <Ionicons name="chevron-back" size={24} color="#007AFF" />
+          <Text style={styles.backText}>Back</Text>
         </Pressable>
         <Text style={styles.title}>Reading Session</Text>
       </View>
@@ -186,11 +227,11 @@ export default function ReadScreen() {
               />
             )}
             <View style={styles.bookDetails}>
-              <Text style={[styles.bookTitle, showPagePrompt && styles.bookTitleSmall]}>
+              <Text style={[styles.bookTitle, showPagePrompt && styles.bookTitleSmall]} numberOfLines={2}>
                 {book.title}
               </Text>
               {!showPagePrompt && (
-                <Text style={styles.authors}>{book.authors.join(', ')}</Text>
+                <Text style={styles.authors} numberOfLines={1}>{book.authors.join(', ')}</Text>
               )}
             </View>
           </View>
@@ -199,14 +240,20 @@ export default function ReadScreen() {
             <Text style={[styles.timerText, showPagePrompt && styles.timerTextSmall]}>
               {formatTime(elapsedTime)}
             </Text>
-            <Text style={styles.timerLabel}>Time Reading</Text>
+            <Text style={styles.timerLabel}>Reading Time</Text>
           </View>
 
           {!showPagePrompt ? (
             <View style={styles.pageSection}>
-              <Text style={styles.pageLabel}>Starting Page</Text>
-              <Text style={styles.pageNumber}>{currentPage}</Text>
-              <Text style={styles.totalPages}>of {book.pageCount} pages</Text>
+              <Text style={styles.pageLabel}>Current Progress</Text>
+              <View style={styles.pageProgress}>
+                <Text style={styles.pageNumber}>{currentPage}</Text>
+                <Text style={styles.pageSlash}>/</Text>
+                <Text style={styles.totalPagesNumber}>{book.pageCount}</Text>
+              </View>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
+              </View>
             </View>
           ) : (
             <View style={styles.pageSectionPrompt}>
@@ -227,14 +274,36 @@ export default function ReadScreen() {
           <Pressable
             style={[
               styles.button, 
-              showPagePrompt ? styles.saveButton : (isReading ? styles.stopButton : styles.startButton)
+              showPagePrompt ? styles.saveButton : (
+                isReading ? (
+                  isPaused ? styles.resumeButton : styles.pauseButton
+                ) : styles.startButton
+              )
             ]}
-            onPress={showPagePrompt ? handleSaveSession : (isReading ? handleStopReading : handleStartReading)}
+            onPress={
+              showPagePrompt ? handleSaveSession : (
+                isReading ? (
+                  isPaused ? handleResumeReading : handlePauseReading
+                ) : handleStartReading
+              )
+            }
           >
             <Text style={styles.buttonText}>
-              {showPagePrompt ? 'Save Session' : (isReading ? 'Stop Reading' : 'Start Reading')}
+              {showPagePrompt ? 'Save Session' : (
+                isReading ? (
+                  isPaused ? 'Resume Reading' : 'Pause Reading'
+                ) : 'Start Reading'
+              )}
             </Text>
           </Pressable>
+          {isReading && !showPagePrompt && !isPaused && (
+            <Pressable
+              style={[styles.button, styles.stopButton]}
+              onPress={handleStopReading}
+            >
+              <Text style={styles.buttonText}>Stop Reading</Text>
+            </Pressable>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -249,20 +318,26 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginRight: 10,
   },
   backText: {
-    fontSize: 16,
+    fontSize: 17,
     color: '#007AFF',
+    marginLeft: 4,
+    fontWeight: '500',
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1a1a1a',
   },
   keyboardAvoid: {
     flex: 1,
@@ -271,120 +346,197 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 100 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 24,
   },
   bookInfo: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 32,
+    width: '100%',
   },
   coverImage: {
-    width: 120,
-    height: 180,
-    borderRadius: 8,
-    marginBottom: 15,
+    width: 140,
+    height: 210,
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   coverImageSmall: {
-    width: 80,
-    height: 120,
-    marginBottom: 10,
+    width: 100,
+    height: 150,
+    marginBottom: 16,
   },
   bookDetails: {
     alignItems: 'center',
+    width: '100%',
   },
   bookTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 5,
+    marginBottom: 8,
+    color: '#1a1a1a',
+    letterSpacing: -0.5,
   },
   bookTitleSmall: {
-    fontSize: 16,
-    marginBottom: 0,
+    fontSize: 20,
+    marginBottom: 4,
   },
   authors: {
-    fontSize: 16,
+    fontSize: 17,
     color: '#666',
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   timerSection: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 40,
+    marginTop: 20,
+    backgroundColor: '#f8f9fa',
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    width: '100%',
   },
   timerSectionSmall: {
-    marginBottom: 20,
+    marginBottom: 32,
+    paddingVertical: 20,
   },
   timerText: {
-    fontSize: 48,
-    fontWeight: 'bold',
+    fontSize: 56,
+    fontWeight: '500',
     fontVariant: ['tabular-nums'],
+    color: '#1a1a1a',
+    letterSpacing: -0.5,
   },
   timerTextSmall: {
-    fontSize: 36,
+    fontSize: 48,
   },
   timerLabel: {
-    fontSize: 16,
+    fontSize: 13,
     color: '#666',
-    marginTop: 5,
+    marginTop: 8,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
   },
   pageSection: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 32,
     width: '100%',
+    backgroundColor: '#f8f9fa',
+    padding: 24,
+    borderRadius: 16,
   },
   pageSectionPrompt: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
     width: '100%',
     backgroundColor: '#f8f9fa',
-    padding: 20,
-    borderRadius: 12,
+    padding: 24,
+    borderRadius: 16,
   },
   pageLabel: {
-    fontSize: 16,
-    marginBottom: 10,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 16,
+    color: '#1a1a1a',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  pageProgress: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginVertical: 12,
   },
   pageNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 32,
+    fontWeight: '600',
+    color: '#007AFF',
+    letterSpacing: -0.5,
   },
-  pageInput: {
+  pageSlash: {
     fontSize: 24,
-    fontWeight: 'bold',
-    borderWidth: 2,
-    borderColor: '#007AFF',
-    borderRadius: 8,
-    padding: 10,
-    minWidth: 100,
-    textAlign: 'center',
+    color: '#999',
+    marginHorizontal: 8,
+    fontWeight: '300',
   },
-  totalPages: {
-    fontSize: 14,
+  totalPagesNumber: {
+    fontSize: 24,
     color: '#666',
-    marginTop: 5,
+    fontWeight: '500',
+    letterSpacing: -0.5,
+  },
+  progressBar: {
+    height: 3,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 1.5,
+    width: '100%',
+    marginVertical: 12,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 1.5,
   },
   button: {
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    marginTop: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    marginTop: 24,
     width: '100%',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    backgroundColor: '#fff',
   },
   startButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#34C759',
+  },
+  pauseButton: {
+    backgroundColor: '#FF9500',
+  },
+  resumeButton: {
+    backgroundColor: '#34C759',
   },
   stopButton: {
-    backgroundColor: '#f44336',
+    backgroundColor: '#FF3B30',
+    marginTop: 12,
   },
   saveButton: {
     backgroundColor: '#007AFF',
   },
   buttonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  pageInput: {
+    fontSize: 28,
+    fontWeight: '600',
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 120,
+    textAlign: 'center',
+    backgroundColor: '#fff',
+    color: '#1a1a1a',
+  },
+  totalPages: {
+    fontSize: 15,
+    color: '#666',
+    marginTop: 8,
+    fontWeight: '500',
   },
 }); 

@@ -34,6 +34,7 @@ class AppManager {
   };
   private lastNotification: LastNotification | null = null;
   private isInitialized = false;
+  private requiredReadingMinutes: number = 30; // Default reading time requirement
 
   private constructor() {
     this.loadState();
@@ -59,6 +60,8 @@ class AppManager {
           for (const packageName of this.lockedApps) {
             await appLocker.blockApp(packageName);
           }
+        } else if (Platform.OS === 'ios') {
+          await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps), this.requiredReadingMinutes);
         }
       }
 
@@ -137,7 +140,7 @@ class AppManager {
     if (Platform.OS === 'android') {
       await appLocker.blockApp(packageName);
     } else if (Platform.OS === 'ios') {
-      await appLockerIOS.setAppRestrictions([packageName]);
+      await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps), this.requiredReadingMinutes);
     }
     await this.saveState();
   }
@@ -147,7 +150,12 @@ class AppManager {
     if (Platform.OS === 'android') {
       await appLocker.unblockApp(packageName);
     } else if (Platform.OS === 'ios') {
-      await appLockerIOS.removeAppRestrictions([packageName]);
+      const remainingApps = Array.from(this.lockedApps);
+      if (remainingApps.length > 0) {
+        await appLockerIOS.setAppRestrictions(remainingApps, this.requiredReadingMinutes);
+      } else {
+        await appLockerIOS.removeAppRestrictions([packageName]);
+      }
     }
     await this.saveState();
 
@@ -233,6 +241,17 @@ class AppManager {
     } else if (Platform.OS === 'ios') {
       await appLockerIOS.requestAuthorization();
     }
+  }
+
+  public async updateReadingTimeRequirement(minutes: number): Promise<void> {
+    this.requiredReadingMinutes = minutes;
+    if (Platform.OS === 'ios' && this.lockedApps.size > 0) {
+      await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps), minutes);
+    }
+  }
+
+  public getRequiredReadingMinutes(): number {
+    return this.requiredReadingMinutes;
   }
 }
 

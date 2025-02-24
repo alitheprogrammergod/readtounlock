@@ -4,15 +4,14 @@ import { notificationService } from '../services/notifications';
 
 export interface AppLockItem extends InstalledApp {
   isLocked: boolean;
-  requiredMinutes: number;
 }
 
 interface AppLockContextType {
   apps: AppLockItem[];
   toggleAppLock: (id: string) => Promise<void>;
-  updateRequiredMinutes: (id: string, minutes: number) => Promise<void>;
+  requiredMinutes: number;
+  setRequiredMinutes: (minutes: number) => Promise<void>;
   isAppLocked: (id: string) => boolean;
-  getRequiredMinutes: (id: string) => number;
   totalRequiredMinutes: number;
   readingProgress: number;
 }
@@ -20,11 +19,13 @@ interface AppLockContextType {
 const AppLockContext = createContext<AppLockContextType | undefined>(undefined);
 
 const STORAGE_KEY = '@app_locks_v2';
+const DEFAULT_REQUIRED_MINUTES = 30;
 
 export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const [apps, setApps] = useState<AppLockItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [readingProgress, setReadingProgress] = useState(0);
+  const [requiredMinutes, setRequiredMinutes] = useState(DEFAULT_REQUIRED_MINUTES);
 
   // Load installed apps and their lock status
   useEffect(() => {
@@ -41,7 +42,6 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       const appsWithLockStatus = installedApps.map((app: InstalledApp) => ({
         ...app,
         isLocked: appManager.isAppLocked(app.packageName),
-        requiredMinutes: 30, // Default value
       }));
       setApps(appsWithLockStatus);
       updateReadingProgress();
@@ -77,11 +77,9 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     setApps(newApps);
   }
 
-  async function updateRequiredMinutes(id: string, minutes: number) {
-    const newApps = apps.map(app =>
-      app.id === id ? { ...app, requiredMinutes: minutes } : app
-    );
-    setApps(newApps);
+  async function updateRequiredMinutes(minutes: number) {
+    setRequiredMinutes(minutes);
+    await appManager.updateReadingTimeRequirement(minutes);
   }
 
   function isAppLocked(id: string): boolean {
@@ -89,14 +87,8 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     return app?.isLocked || false;
   }
 
-  function getRequiredMinutes(id: string): number {
-    const app = apps.find(a => a.id === id);
-    return app?.requiredMinutes || 0;
-  }
-
-  const totalRequiredMinutes = apps
-    .filter(app => app.isLocked)
-    .reduce((total, app) => total + app.requiredMinutes, 0);
+  // Total required minutes is now just the base requirement if any apps are locked
+  const totalRequiredMinutes = apps.some(app => app.isLocked) ? requiredMinutes : 0;
 
   if (isLoading) {
     return null;
@@ -107,9 +99,9 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       value={{
         apps,
         toggleAppLock,
-        updateRequiredMinutes,
+        requiredMinutes,
+        setRequiredMinutes: updateRequiredMinutes,
         isAppLocked,
-        getRequiredMinutes,
         totalRequiredMinutes,
         readingProgress,
       }}

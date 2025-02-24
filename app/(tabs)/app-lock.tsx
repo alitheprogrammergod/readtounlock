@@ -8,6 +8,9 @@ import {
   Switch,
   Alert,
   Platform,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,12 +21,14 @@ export default function AppLockScreen() {
   const {
     apps,
     toggleAppLock,
-    updateRequiredMinutes,
-    totalRequiredMinutes,
+    requiredMinutes,
+    setRequiredMinutes,
     readingProgress,
   } = useAppLock();
 
   const [hasPermissions, setHasPermissions] = useState(false);
+  const [isCustomTimeModalVisible, setCustomTimeModalVisible] = useState(false);
+  const [customTimeInput, setCustomTimeInput] = useState('');
 
   useEffect(() => {
     checkPermissions();
@@ -77,17 +82,17 @@ export default function AppLockScreen() {
     await toggleAppLock(id);
   }
 
-  function handleUpdateMinutes(id: string, minutes: number) {
+  function handleUpdateMinutes(minutes: number) {
     if (minutes >= 0) {
-      updateRequiredMinutes(id, minutes);
+      setRequiredMinutes(minutes);
     }
   }
 
   function handleHelp() {
     Alert.alert(
       'How App Locking Works',
-      'Select apps to lock and set how many minutes you need to read to unlock them. ' +
-      'The app will monitor your reading time and automatically unlock apps when you reach your goals.\n\n' +
+      'Set how many minutes you need to read to unlock your apps. ' +
+      'This time requirement applies to all locked apps. Once you reach your reading goal, all apps will unlock.\n\n' +
       'Tips:\n' +
       '• Start with short reading goals (15-30 minutes)\n' +
       '• Lock distracting apps first\n' +
@@ -96,7 +101,23 @@ export default function AppLockScreen() {
     );
   }
 
-  const remainingMinutes = Math.max(0, totalRequiredMinutes - readingProgress);
+  function handleCustomTime() {
+    setCustomTimeInput(requiredMinutes.toString());
+    setCustomTimeModalVisible(true);
+  }
+
+  function handleSetCustomTime() {
+    const minutes = parseInt(customTimeInput || '0', 10);
+    if (!isNaN(minutes) && minutes >= 0) {
+      handleUpdateMinutes(minutes);
+      setCustomTimeModalVisible(false);
+    } else {
+      Alert.alert('Invalid Input', 'Please enter a valid number of minutes.');
+    }
+  }
+
+  const remainingMinutes = Math.max(0, requiredMinutes - readingProgress);
+  const hasLockedApps = apps.some(app => app.isLocked);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -119,8 +140,35 @@ export default function AppLockScreen() {
           </View>
         </View>
 
+        {hasLockedApps && (
+          <View style={styles.timeRequirementContainer}>
+            <Text style={styles.timeRequirementLabel}>Reading Time Required</Text>
+            <View style={styles.timeControl}>
+              <Pressable
+                onPress={() => handleUpdateMinutes(requiredMinutes - 15)}
+                style={styles.timeButton}
+              >
+                <Text style={styles.timeButtonText}>-15</Text>
+              </Pressable>
+              <Text style={styles.timeValue}>{requiredMinutes} min</Text>
+              <Pressable
+                onPress={() => handleUpdateMinutes(requiredMinutes + 15)}
+                style={styles.timeButton}
+              >
+                <Text style={styles.timeButtonText}>+15</Text>
+              </Pressable>
+            </View>
+            <Pressable
+              onPress={handleCustomTime}
+              style={[styles.timeButton, styles.customTimeButton]}
+            >
+              <Text style={styles.timeButtonText}>Set Custom Time</Text>
+            </Pressable>
+          </View>
+        )}
+
         <Text style={styles.description}>
-          Lock apps and set reading requirements. Apps will unlock automatically when you meet your reading goals.
+          Lock apps and set a reading requirement. All apps will unlock when you complete your reading goal.
         </Text>
 
         {!hasPermissions && Platform.OS === 'android' && (
@@ -143,34 +191,54 @@ export default function AppLockScreen() {
                 <Text style={styles.appName}>{app.name}</Text>
               </View>
               
-              <View style={styles.appControls}>
-                <View style={styles.minutesControl}>
-                  <Pressable
-                    onPress={() => handleUpdateMinutes(app.id, app.requiredMinutes - 15)}
-                    style={styles.minutesButton}
-                  >
-                    <Text style={styles.minutesButtonText}>-</Text>
-                  </Pressable>
-                  <Text style={styles.minutes}>{app.requiredMinutes}m</Text>
-                  <Pressable
-                    onPress={() => handleUpdateMinutes(app.id, app.requiredMinutes + 15)}
-                    style={styles.minutesButton}
-                  >
-                    <Text style={styles.minutesButtonText}>+</Text>
-                  </Pressable>
-                </View>
-                
-                <Switch
-                  value={app.isLocked}
-                  onValueChange={() => handleToggleLock(app.id)}
-                  trackColor={{ false: '#767577', true: '#81b0ff' }}
-                  thumbColor={app.isLocked ? '#007AFF' : '#f4f3f4'}
-                />
-              </View>
+              <Switch
+                value={app.isLocked}
+                onValueChange={() => handleToggleLock(app.id)}
+                trackColor={{ false: '#767577', true: '#81b0ff' }}
+                thumbColor={app.isLocked ? '#007AFF' : '#f4f3f4'}
+              />
             </View>
           ))}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={isCustomTimeModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCustomTimeModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Custom Time</Text>
+            <TextInput
+              style={styles.timeInput}
+              keyboardType="numeric"
+              value={customTimeInput}
+              onChangeText={setCustomTimeInput}
+              placeholder="Enter minutes"
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setCustomTimeModalVisible(false)}
+                style={[styles.modalButton, styles.cancelButton]}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSetCustomTime}
+                style={[styles.modalButton, styles.setButton]}
+              >
+                <Text style={styles.setButtonText}>Set</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -223,6 +291,41 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#007AFF',
   },
+  timeRequirementContainer: {
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+  },
+  timeRequirementLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  timeControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  timeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  timeValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginHorizontal: 16,
+    minWidth: 60,
+    textAlign: 'center',
+  },
   permissionWarning: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -261,31 +364,65 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
   },
-  appControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  minutesControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  minutesButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
+  customTimeButton: {
+    marginTop: 12,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  minutesButtonText: {
-    fontSize: 16,
-    color: '#666',
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  minutes: {
-    marginHorizontal: 8,
-    fontSize: 16,
-    minWidth: 35,
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
     textAlign: 'center',
+  },
+  timeInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginHorizontal: 8,
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+  },
+  setButton: {
+    backgroundColor: '#007AFF',
+  },
+  cancelButtonText: {
+    color: '#666',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  setButtonText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 
