@@ -15,6 +15,12 @@ export default function BookLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen 
+        name="read" 
+        options={{
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 } 

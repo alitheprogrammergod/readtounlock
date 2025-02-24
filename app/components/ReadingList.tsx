@@ -14,6 +14,10 @@ function BookCard({ book, onRemove }: { book: Book; onRemove: (id: string) => vo
       `"${book.title}" by ${book.authors.join(', ')}`,
       [
         {
+          text: 'Start Reading',
+          onPress: () => router.push(`/(book)/read?id=${book.id}`),
+        },
+        {
           text: 'Remove from List',
           onPress: () => {
             Alert.alert(
@@ -37,8 +41,8 @@ function BookCard({ book, onRemove }: { book: Book; onRemove: (id: string) => vo
   }, [book, onRemove]);
 
   const handlePress = useCallback(() => {
-    handleLongPress();
-  }, [handleLongPress]);
+    router.push(`/(book)/read?id=${book.id}`);
+  }, [book.id]);
   
   return (
     <Pressable 
@@ -79,7 +83,7 @@ function BookCard({ book, onRemove }: { book: Book; onRemove: (id: string) => vo
         )}
       </View>
       <View style={styles.iconContainer}>
-        <Ionicons name="ellipsis-vertical" size={20} color="#999" />
+        <Ionicons name="chevron-forward" size={20} color="#999" />
       </View>
     </Pressable>
   );
