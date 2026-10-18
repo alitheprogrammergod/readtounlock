@@ -131,7 +131,7 @@ export default function ReadScreen() {
       return;
     }
     if (dayKeyAt(new Date()) !== sessionDay) {
-      Alert.alert('Session crossed midnight', 'Finish and save your reading on the same day to receive today's credit.');
+      Alert.alert('Session crossed midnight', 'Finish and save your reading on the same day to receive today’s credit.');
       return;
     }
     savingRef.current = true;
