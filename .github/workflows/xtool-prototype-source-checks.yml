@@ -1,0 +1,25 @@
+name: xtool Screen Time prototype source checks
+
+on:
+  push:
+    branches:
+      - experiment/xtool-screen-time
+  pull_request:
+    paths:
+      - 'experiments/xtool-screentime/**'
+      - '.github/workflows/xtool-prototype-source-checks.yml'
+
+jobs:
+  source-checks-only:
+    name: Validate SwiftPM source (not an iOS build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift toolchain
+        run: swift --version
+      - name: Check SwiftPM package manifest
+        run: swift package dump-package --package-path experiments/xtool-screentime > /dev/null
+      - name: Parse SwiftUI sources
+        run: swiftc -frontend -parse experiments/xtool-screentime/Sources/ScreenTimeLab/*.swift
+      - name: Check plist, token restrictions and safety controls
+        run: python3 -m unittest discover -s experiments/xtool-screentime/tests -v
