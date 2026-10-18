@@ -29,3 +29,26 @@ test('shield failure is visible, state remains saved, and sync retries',async()=
 test('no native blocking call when permission is not granted',async()=>{let m=make();await m.controller.initialize();await m.controller.selectApps(['ig']);assert.deepEqual(m.applied,[]);});
 test('controller does not repeat reward after permission recovery',async()=>{let m=make(earned);await m.controller.initialize();await m.controller.selectApps(['ig']);await m.controller.recordReading('a','2026-10-18',600);await m.controller.setPermission(true);assert.equal((await m.controller.status()).unlocked,true);m.setTime(date('2026-10-18T12:21:00'));await m.controller.setPermission(false);await m.controller.setPermission(true);assert.equal((await m.controller.status()).unlocked,false);});
 test('randomized event simulation maintains safety invariants',()=>{let s=base();let seed=192837;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};for(let i=0;i<30000;i++){const now=new Date(d.getTime()+Math.floor(i/3000)*60000);const a=Math.floor(rand()*5);if(a===0)s=reduceUnlock(s,{type:'permission',granted:rand()>.2},now,earned);else if(a===1)s=reduceUnlock(s,{type:'selectApps',appIds:rand()>.5?['ig']:['ig','yt']},now,earned);else if(a<=3)s=reduceUnlock(s,{type:'record',sessionId:'s'+Math.floor(rand()*50),sessionDay:dayKeyAt(now),elapsedSeconds:Math.floor(rand()*1200)},now,earned);else s=reduceUnlock(s,{type:'tick'},now,earned);let st=getUnlockStatus(s,now,earned);assert(s.secondsRead>=0);assert(s.rewardsGranted<=Math.floor(s.secondsRead/earned.requiredSeconds));if(!s.permissionGranted)assert.deepEqual(st.blockedApps,[]);if(st.unlocked)assert.deepEqual(st.blockedApps,[]);}});
+
+const { applyBookSession } = require('../dist/v2-core/book-progress.js');
+test('saving a reading session twice credits book minutes once', () => {
+  const p = { currentPage: 5, lastReadAt: null, totalTimeRead: 12 };
+  const after = applyBookSession(p, 200, 15, 10, 'session-42');
+  const retried = applyBookSession(after, 200, 15, 10, 'session-42');
+  assert.equal(retried.totalTimeRead, 22);
+  assert.equal(retried.currentPage, 15);
+  assert.equal(retried.creditedSessionIds.length, 1);
+});
+test('rejects invalid page counts and backward progress', () => {
+  const p = { currentPage: 25, lastReadAt: null, totalTimeRead: 9 };
+  assert.throws(() => applyBookSession(p, 200, 24, 2, 's1'));
+  assert.throws(() => applyBookSession(p, 200, 201, 2, 's2'));
+});
+test('updating goal keeps prior recorded reading credit', async () => {
+  const m = make();
+  await m.controller.initialize();
+  await m.controller.recordReading('goal-change','2026-10-18',600);
+  await m.controller.setPolicy({mode:'daily',requiredSeconds:1800});
+  assert.equal((await m.controller.status()).readingSeconds,600);
+  assert.equal((await m.controller.status()).unlocked,false);
+});

@@ -1,22 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useReadingList } from '../../contexts/reading-list';
-import { appManager } from '../../services/app-manager';
 import { Ionicons } from '@expo/vector-icons';
 import BookPlaceholder from '../components/BookPlaceholder';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
-import { useAppLock } from '../../contexts/app-lock';
+import { useReadingRewards } from '../../contexts/reading-rewards';
+import { dayKeyAt } from '../../services/reading-unlock-engine';
 import { useTheme } from '../../contexts/theme';
 
-const READING_SESSION_KEY = '@reading_session';
-
+const READING_SESSION_KEY = '@reading_session_v2';
 interface ReadingSession {
   bookId: string;
-  startTime: string;
+  sessionId: string;
+  sessionDay: string;
   elapsedTime: number;
   isPaused: boolean;
 }
@@ -24,165 +24,129 @@ interface ReadingSession {
 export default function ReadScreen() {
   const { id } = useLocalSearchParams();
   const { books, updateProgress } = useReadingList();
-  const { addReadingTime } = useAppLock();
+  const { recordReading } = useReadingRewards();
   const { isDarkMode } = useTheme();
   const book = books.find(b => b.id === id);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const savingRef = useRef(false);
   const [isReading, setIsReading] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentPage, setCurrentPage] = useState(book?.progress.currentPage || 0);
-  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionDay, setSessionDay] = useState<string | null>(null);
   const [showPagePrompt, setShowPagePrompt] = useState(false);
   const [tempPage, setTempPage] = useState('');
   const pageInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Load saved session on mount
+  // Restore a previous, paused session. Never count wall time spent outside the app.
   useEffect(() => {
-    loadSession();
-  }, []);
-
-  // Save session when unmounting or navigating away
-  useEffect(() => {
-    return () => {
-      if (isReading) {
-        saveSession();
-      }
-    };
-  }, [isReading]);
-
-  // Timer effect
-  useEffect(() => {
-    // Clear any existing interval first
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    // Only start a new interval if we're reading and not paused
-    if (isReading && !isPaused && startTime) {
-      console.log('Starting timer...');
-      intervalRef.current = setInterval(() => {
-        console.log('Timer tick');
-        setElapsedTime(prev => {
-          const newTime = prev + 1;
-          if (newTime % 60 === 0) {
-            appManager.addReadingTime(1);
-          }
-          return newTime;
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        console.log('Cleaning up timer');
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [isReading, isPaused, startTime]);
-
-  const loadSession = async () => {
-    try {
-      const sessionJson = await AsyncStorage.getItem(READING_SESSION_KEY);
-      if (sessionJson) {
-        const session: ReadingSession = JSON.parse(sessionJson);
-        if (session.bookId === id) {
-          setElapsedTime(session.elapsedTime);
-          setStartTime(new Date(session.startTime));
+    let active = true;
+    async function load() {
+      try {
+        const json = await AsyncStorage.getItem(READING_SESSION_KEY);
+        if (!json) return;
+        const saved: ReadingSession = JSON.parse(json);
+        if (active && saved.bookId === id && saved.sessionId && Number.isSafeInteger(saved.elapsedTime)) {
+          setSessionId(saved.sessionId);
+          setSessionDay(saved.sessionDay);
+          setElapsedTime(Math.max(0, saved.elapsedTime));
           setIsReading(false);
           setIsPaused(true);
         }
-      }
-    } catch (error) {
-      console.error('Error loading reading session:', error);
+      } catch(e) { console.warn('Could not restore reading session', e); }
     }
-  };
+    load();
+    return () => { active = false; };
+  }, [id]);
 
-  const saveSession = async () => {
-    if (!startTime) return;
-    
-    try {
-      const session: ReadingSession = {
-        bookId: id as string,
-        startTime: startTime.toISOString(),
-        elapsedTime,
-        isPaused,
-      };
-      await AsyncStorage.setItem(READING_SESSION_KEY, JSON.stringify(session));
-    } catch (error) {
-      console.error('Error saving reading session:', error);
+  const persist = useCallback(async (seconds: number, paused: boolean) => {
+    if (!sessionId || !sessionDay) return;
+    const saved: ReadingSession = {bookId: String(id), sessionId, sessionDay,
+      elapsedTime: seconds, isPaused: paused};
+    await AsyncStorage.setItem(READING_SESSION_KEY, JSON.stringify(saved));
+  }, [id, sessionId, sessionDay]);
+
+  useEffect(() => {
+    // Save a checkpoint every five seconds, including when paused.
+    if (sessionId && (elapsedTime % 5 === 0 || isPaused)) {
+      persist(elapsedTime, isPaused).catch(console.warn);
     }
-  };
+  }, [elapsedTime, isPaused, sessionId, persist]);
+
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    if (isReading && !isPaused && !showPagePrompt) {
+      intervalRef.current = setInterval(() => setElapsedTime(prev => prev + 1), 1000);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [isReading, isPaused, showPagePrompt]);
 
   const handleStartReading = useCallback(() => {
-    console.log('Starting reading session');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setStartTime(new Date());
+    const now = new Date();
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSessionId(`${now.getTime()}-${Math.random().toString(36).slice(2)}`);
+    setSessionDay(dayKeyAt(now));
+    setElapsedTime(0);
     setIsReading(true);
     setIsPaused(false);
   }, []);
 
   const handlePauseReading = useCallback(async () => {
-    console.log('Pausing reading session');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsPaused(true);
-  }, []);
+    try { await persist(elapsedTime, true); }
+    catch(e) { console.warn('Could not save paused session', e); }
+  }, [elapsedTime, persist]);
 
   const handleResumeReading = useCallback(() => {
-    console.log('Resuming reading session');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (!startTime) {
-      setStartTime(new Date());
-    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsReading(true);
     setIsPaused(false);
-  }, [startTime]);
+  }, []);
 
   const handleStopReading = useCallback(async () => {
     if (!book) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsReading(false);
-    setIsPaused(false);
+    setIsPaused(true);
     setShowPagePrompt(true);
     setTempPage(currentPage.toString());
-    
-    await AsyncStorage.removeItem(READING_SESSION_KEY);
-    
+    try { await persist(elapsedTime, true); }
+    catch(e) { console.warn('Could not save stopped session', e); }
     setTimeout(() => {
       scrollViewRef.current?.scrollTo({ y: 400, animated: true });
       pageInputRef.current?.focus();
     }, 100);
-
-    // Save progress
-    if (elapsedTime > 0) {
-      const minutes = Math.floor(elapsedTime / 60);
-      await updateProgress(book.id, book.progress.currentPage, minutes);
-      await addReadingTime(minutes);
-    }
-  }, [book, currentPage, elapsedTime, updateProgress, addReadingTime]);
+  }, [book, currentPage, elapsedTime, persist]);
 
   const handleSaveSession = useCallback(async () => {
-    if (!book) return;
-    
-    const finalPage = parseInt(tempPage) || currentPage;
-    const timeRead = Math.floor(elapsedTime / 60); // Convert seconds to minutes
-
-    try {
-      await updateProgress(book.id, finalPage, timeRead);
-      Alert.alert(
-        'Reading Session Complete',
-        `You read for ${timeRead} minutes and reached page ${finalPage}!`,
-        [
-          { text: 'OK', onPress: () => router.back() }
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save reading progress');
+    if (!book || !sessionId || !sessionDay || savingRef.current) return;
+    const finalPage = Number(tempPage);
+    if (!Number.isSafeInteger(finalPage) ||
+        finalPage < book.progress.currentPage || finalPage > book.pageCount) {
+      Alert.alert('Check the page number', `Enter a page from ${book.progress.currentPage} to ${book.pageCount}.`);
+      return;
     }
-  }, [book, tempPage, currentPage, elapsedTime, updateProgress]);
+    if (dayKeyAt(new Date()) !== sessionDay) {
+      Alert.alert('Session crossed midnight', 'Finish and save your reading on the same day to receive today's credit.');
+      return;
+    }
+    savingRef.current = true;
+    try {
+      // The V2 engine deduplicates cumulative reading credit using sessionId.
+      await recordReading(sessionId, sessionDay, elapsedTime);
+      await updateProgress(book.id, finalPage, Math.floor(elapsedTime / 60), sessionId);
+      await AsyncStorage.removeItem(READING_SESSION_KEY);
+      Alert.alert('Reading saved', `You read for ${Math.floor(elapsedTime / 60)} minutes and reached page ${finalPage}.`, [
+        { text: 'Done', onPress: () => router.back() },
+      ]);
+    } catch (e) {
+      Alert.alert('Save failed', 'Your session is still saved. Please try again.');
+    } finally { savingRef.current = false; }
+  }, [book, sessionId, sessionDay, tempPage, elapsedTime, recordReading, updateProgress]);
 
   // Calculate progress percentage
   const progressPercentage = book ? (currentPage / book.pageCount) * 100 : 0;
@@ -376,7 +340,7 @@ export default function ReadScreen() {
               </Pressable>
             )}
 
-            {isReading && (
+            {isReading && !isPaused && (
               <>
                 <Pressable 
                   style={[styles.button, styles.pauseButton]}

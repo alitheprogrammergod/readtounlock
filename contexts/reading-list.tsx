@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { applyBookSession } from '../services/book-progress';
 
 export interface Book {
   id: string;
@@ -93,21 +94,11 @@ export function ReadingListProvider({ children }: { children: React.ReactNode })
     await saveBooks(newBooks);
   }
 
-  async function updateProgress(id: string, currentPage: number, timeRead: number) {
-    console.log('Updating progress:', { id, currentPage, timeRead });
-    const newBooks = books.map(book => {
-      if (book.id === id) {
-        return {
-          ...book,
-          progress: {
-            currentPage,
-            lastReadAt: new Date().toISOString(),
-            totalTimeRead: book.progress.totalTimeRead + timeRead,
-          },
-        };
-      }
-      return book;
-    });
+  async function updateProgress(id: string, currentPage: number, timeRead: number, sessionId?: string) {
+    const newBooks = books.map(book => book.id === id
+      ? { ...book, progress: applyBookSession(book.progress, book.pageCount, currentPage, timeRead, sessionId) }
+      : book
+    );
     await saveBooks(newBooks);
   }
 

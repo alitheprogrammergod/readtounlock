@@ -53,6 +53,16 @@ export class ReadingUnlockController {
   async setPermission(granted: boolean): Promise<UnlockStatus> {
     return this.exclusive(() => this.write({ type: 'permission', granted }));
   }
+  async setPolicy(policy: UnlockPolicy): Promise<UnlockStatus> {
+    checkPolicy(policy);
+    return this.exclusive(async () => {
+      this.policy = policy;
+      return this.write({ type: 'tick' });
+    });
+  }
+  async getSelectedApps(): Promise<string[]> {
+    return this.exclusive(async () => [...(await this.ensureLoaded()).selectedApps]);
+  }
   async sync(): Promise<UnlockStatus> { return this.exclusive(() => this.write({ type: 'tick' })); }
   async status(): Promise<UnlockStatus> { return this.sync(); }
 }
