@@ -16,6 +16,7 @@ export interface Book {
     currentPage: number;
     lastReadAt: string | null;
     totalTimeRead: number; // in minutes
+    creditedSessionIds?: string[];
   };
 }
 
@@ -23,7 +24,7 @@ interface ReadingListContextType {
   books: Book[];
   addBook: (book: Omit<Book, 'id' | 'progress'>) => Promise<void>;
   removeBook: (id: string) => Promise<void>;
-  updateProgress: (id: string, currentPage: number, timeRead: number) => Promise<void>;
+  updateProgress: (id: string, currentPage: number, timeRead: number, sessionId?: string) => Promise<void>;
   isInReadingList: (isbn: string) => boolean;
 }
 
