@@ -55,7 +55,7 @@ if (process.argv.includes('--generated')) {
     assert(String(b.INFOPLIST_FILE).includes('Info.plist'));
     assert(String(b.PRODUCT_BUNDLE_IDENTIFIER).includes(bundle));
   }
-  const copyPhases=Object.values(proj.pbxCopyfilesBuildPhaseSection()).filter(x=>x && typeof x==='object');
+  const copyPhases=Object.values(proj.hash.project.objects.PBXCopyFilesBuildPhase || {}).filter(x=>x && typeof x==='object');
   assert(copyPhases.some(x => String(x.dstSubfolderSpec)==='13'), 'Host must embed extension into PlugIns');
   const dir=path.join(ios,'RTUDailyMonitor');
   for(const name of ['DeviceActivityMonitorExtension.swift','Info.plist','RTUDailyMonitor.entitlements']) {
