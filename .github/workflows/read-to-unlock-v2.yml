@@ -33,3 +33,12 @@ jobs:
       - run: npm ci
       - run: npx expo prebuild --platform ios --no-install
       - run: node scripts/check-daily-monitor.cjs --generated
+
+  apple-sdk-typecheck:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Type-check Device Activity extension using Apple's iOS SDK (no signing)
+        run: |
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun swiftc -typecheck -application-extension -sdk "$SDK" -target arm64-apple-ios16.0-simulator extensions/rtu-daily-monitor/DeviceActivityMonitorExtension.swift
