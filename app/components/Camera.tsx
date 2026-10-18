@@ -1,27 +1,15 @@
-import { Camera as ExpoCamera } from 'expo-camera';
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { CameraView } from 'expo-camera';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 interface CameraProps {
-  style?: any;
+  style?: StyleProp<ViewStyle>;
   type?: 'front' | 'back';
-  ref?: React.RefObject<any>;
 }
 
-const Camera = React.forwardRef<any, CameraProps>((props, ref) => {
-  return (
-    <ExpoCamera
-      {...props}
-      ref={ref}
-      style={[styles.camera, props.style]}
-    />
-  );
-});
+const Camera = React.forwardRef<React.ElementRef<typeof CameraView>, CameraProps>(({type='back',style}, ref) =>
+  <CameraView facing={type} ref={ref} style={[styles.camera, style]} />
+);
 
-const styles = StyleSheet.create({
-  camera: {
-    flex: 1,
-  },
-});
-
-export { Camera }; 
+const styles = StyleSheet.create({ camera: { flex: 1 } });
+export { Camera };

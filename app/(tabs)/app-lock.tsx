@@ -1,479 +1,104 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Switch,
-  Alert,
-  Platform,
-  TextInput,
-  Modal,
-  KeyboardAvoidingView,
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useAppLock } from '../../contexts/app-lock';
-import { useTheme } from '../../contexts/theme';
-import { appManager } from '../../services/app-manager';
+import { useFocusEffect } from 'expo-router';
+import { useReadingRewards } from '../../contexts/reading-rewards';
+import { iosScreenTime } from '../../services/ios-screen-time';
 
-export default function AppLockScreen() {
-  const {
-    apps,
-    toggleAppLock,
-    requiredMinutes,
-    setRequiredMinutes,
-    readingProgress,
-  } = useAppLock();
-  const { isDarkMode } = useTheme();
+const WISHLIST = ['Instagram', 'YouTube', 'TikTok', 'Snapchat', 'Facebook', 'X'];
+const GOALS = [5, 10, 15, 20, 30, 45, 60];
 
-  const [hasPermissions, setHasPermissions] = useState(false);
-  const [isCustomTimeModalVisible, setCustomTimeModalVisible] = useState(false);
-  const [customTimeInput, setCustomTimeInput] = useState('');
+export default function DistractionsScreen() {
+  const { status, goalMinutes, selectedApps, blockerAvailable, screenTimeStatus,
+    setGoalMinutes, setSelectedApps, requestIosPermission, pickIosApps, disableIosBlocking, refresh } = useReadingRewards();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useFocusEffect(useCallback(() => { refresh().catch(console.warn); }, [refresh]));
 
-  useEffect(() => {
-    checkPermissions();
-  }, []);
-
-  async function checkPermissions() {
-    const hasAllPermissions = await appManager.checkPermissions();
-    setHasPermissions(hasAllPermissions);
-    
-    if (!hasAllPermissions && Platform.OS === 'android') {
-      Alert.alert(
-        'Permissions Required',
-        'Read to Unlock needs accessibility and usage stats permissions to monitor and block apps.',
-        [
-          {
-            text: 'Grant Permissions',
-            onPress: requestPermissions,
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
-    }
+  async function run(action: () => Promise<void>) {
+    if (saving) return;
+    setSaving(true); setError(null);
+    try { await action(); } catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong.'); }
+    finally { setSaving(false); }
   }
+  const totalPicked = (screenTimeStatus?.appCount ?? 0) +
+    (screenTimeStatus?.categoryCount ?? 0) + (screenTimeStatus?.domainCount ?? 0);
+  const isIos = Platform.OS === 'ios';
+  const nativeInstalled = iosScreenTime.isInstalled();
 
-  async function requestPermissions() {
-    await appManager.requestPermissions();
-    await checkPermissions();
-  }
+  return <SafeAreaView style={styles.screen} edges={['top']}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Focus settings</Text>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Your daily reading goal</Text>
+        <Text style={styles.description}>Today: {Math.floor(status.readingSeconds / 60)} of {goalMinutes} minutes</Text>
+        <View style={styles.wrap}>{GOALS.map(m => <Pressable key={m}
+          disabled={saving} onPress={() => run(() => setGoalMinutes(m))}
+          style={[styles.chip, goalMinutes === m && styles.selected]}>
+          <Text style={[styles.chipText,goalMinutes === m && styles.selectedText]}>{m} min</Text>
+        </Pressable>)}</View>
+      </View>
 
-  async function handleToggleLock(id: string) {
-    if (!hasPermissions && Platform.OS === 'android') {
-      Alert.alert(
-        'Permissions Required',
-        'Please grant the required permissions to lock apps.',
-        [
-          {
-            text: 'Grant Permissions',
-            onPress: requestPermissions,
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
-      return;
-    }
-    await toggleAppLock(id);
-  }
-
-  function handleUpdateMinutes(minutes: number) {
-    if (minutes >= 0) {
-      setRequiredMinutes(minutes);
-    }
-  }
-
-  function handleHelp() {
-    Alert.alert(
-      'How App Locking Works',
-      'Set how many minutes you need to read to unlock your apps. ' +
-      'This time requirement applies to all locked apps. Once you reach your reading goal, all apps will unlock.\n\n' +
-      'Tips:\n' +
-      '• Start with short reading goals (15-30 minutes)\n' +
-      '• Lock distracting apps first\n' +
-      '• Reading progress resets daily',
-      [{ text: 'Got it!' }]
-    );
-  }
-
-  function handleCustomTime() {
-    setCustomTimeInput(requiredMinutes.toString());
-    setCustomTimeModalVisible(true);
-  }
-
-  function handleSetCustomTime() {
-    const minutes = parseInt(customTimeInput || '0', 10);
-    if (!isNaN(minutes) && minutes >= 0) {
-      handleUpdateMinutes(minutes);
-      setCustomTimeModalVisible(false);
-    } else {
-      Alert.alert('Invalid Input', 'Please enter a valid number of minutes.');
-    }
-  }
-
-  const remainingMinutes = Math.max(0, requiredMinutes - readingProgress);
-  const hasLockedApps = apps.some(app => app.isLocked);
-
-  return (
-    <SafeAreaView style={[
-      styles.container,
-      { backgroundColor: isDarkMode ? '#000' : '#f2f2f7' }
-    ]}>
-      <ScrollView style={styles.scrollView}>
-        <View style={[
-          styles.header,
-          { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
-        ]}>
-          <Text style={[
-            styles.title,
-            { color: isDarkMode ? '#fff' : '#000' }
-          ]}>Lock Apps</Text>
-          <Pressable onPress={handleHelp} style={styles.helpButton}>
-            <Ionicons name="help-circle-outline" size={24} color="#007AFF" />
-          </Pressable>
-        </View>
-
-        <View style={[
-          styles.statsContainer,
-          { backgroundColor: isDarkMode ? '#1c1c1e' : '#f8f9fa' }
-        ]}>
-          <View style={styles.statItem}>
-            <Text style={[
-              styles.statLabel,
-              { color: isDarkMode ? '#999' : '#666' }
-            ]}>Reading Progress</Text>
-            <Text style={styles.statValue}>{readingProgress} min</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={[
-              styles.statLabel,
-              { color: isDarkMode ? '#999' : '#666' }
-            ]}>Remaining</Text>
-            <Text style={styles.statValue}>{remainingMinutes} min</Text>
-          </View>
-        </View>
-
-        {hasLockedApps && (
-          <View style={[
-            styles.timeRequirementContainer,
-            { backgroundColor: isDarkMode ? '#1c1c1e' : '#f8f9fa' }
-          ]}>
-            <Text style={[
-              styles.timeRequirementLabel,
-              { color: isDarkMode ? '#fff' : '#000' }
-            ]}>Reading Time Required</Text>
-            <View style={styles.timeControl}>
-              <Text style={[
-                styles.timeValue,
-                { color: isDarkMode ? '#fff' : '#000' }
-              ]}>{requiredMinutes} min</Text>
-            </View>
-            <Pressable
-              onPress={handleCustomTime}
-              style={[styles.timeButton, styles.customTimeButton]}
-            >
-              <Text style={styles.timeButtonText}>Set Custom Time</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <Text style={[
-          styles.description,
-          { color: isDarkMode ? '#999' : '#666' }
-        ]}>
-          Lock apps and set a reading requirement. All apps will unlock when you complete your reading goal.
+      {isIos && nativeInstalled ? <View style={styles.panel}>
+        <Text style={styles.panelTitle}>iPhone Screen Time</Text>
+        <Text style={styles.description}>Apple permission: {screenTimeStatus?.authorization ?? 'Checking…'}</Text>
+        <Text style={styles.description}>Chosen in Apple's private picker: {totalPicked} items</Text>
+        <Text style={styles.description}>Daily schedule: {screenTimeStatus?.dailyScheduleRegistered ? 'registered (unverified)' : 'not registered'}</Text>
+        <Text style={styles.description}>Next-day relock monitoring: {screenTimeStatus?.monitoringEnabled ? 'requested' : 'off'}</Text>
+        <Text style={styles.warning}>
+          Experimental integration. App shielding must be checked on a real iPhone. Daily re-locking is scheduled using Apple's Device Activity extension. Real background delivery has not been verified on an iPhone.
         </Text>
-
-        {!hasPermissions && Platform.OS === 'android' && (
-          <View style={styles.permissionWarning}>
-            <Ionicons name="warning-outline" size={24} color="#FFA500" />
-            <Text style={styles.permissionText}>
-              Additional permissions are required to lock apps.{' '}
-              <Text style={styles.permissionButton} onPress={requestPermissions}>
-                Grant Permissions
-              </Text>
-            </Text>
-          </View>
-        )}
-
-        <View style={[
-          styles.appList,
-          { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
-        ]}>
-          {apps.map((app) => (
-            <View key={app.id} style={[
-              styles.appItem,
-              { borderBottomColor: isDarkMode ? '#333' : '#eee' }
-            ]}>
-              <View style={styles.appInfo}>
-                <Ionicons 
-                  name={app.icon as any} 
-                  size={24} 
-                  color={isDarkMode ? '#fff' : '#666'} 
-                />
-                <Text style={[
-                  styles.appName,
-                  { color: isDarkMode ? '#fff' : '#000' }
-                ]}>{app.name}</Text>
-              </View>
-              
-              <Switch
-                value={app.isLocked}
-                onValueChange={() => handleToggleLock(app.id)}
-                trackColor={{ false: '#767577', true: '#81b0ff' }}
-                thumbColor={app.isLocked ? '#007AFF' : '#f4f3f4'}
-              />
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-
-      <Modal
-        visible={isCustomTimeModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCustomTimeModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalContainer}
-        >
-          <View style={[
-            styles.modalContent,
-            { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
-          ]}>
-            <Text style={[
-              styles.modalTitle,
-              { color: isDarkMode ? '#fff' : '#000' }
-            ]}>Set Custom Time</Text>
-            <TextInput
-              style={[
-                styles.timeInput,
-                { 
-                  borderColor: isDarkMode ? '#333' : '#ddd',
-                  backgroundColor: isDarkMode ? '#000' : '#fff',
-                  color: isDarkMode ? '#fff' : '#000'
-                }
-              ]}
-              keyboardType="numeric"
-              value={customTimeInput}
-              onChangeText={setCustomTimeInput}
-              placeholder="Enter minutes"
-              placeholderTextColor={isDarkMode ? '#666' : '#999'}
-              autoFocus
-            />
-            <View style={styles.modalButtons}>
-              <Pressable
-                onPress={() => setCustomTimeModalVisible(false)}
-                style={[
-                  styles.modalButton,
-                  styles.cancelButton,
-                  { backgroundColor: isDarkMode ? '#333' : '#f8f9fa' }
-                ]}
-              >
-                <Text style={[
-                  styles.cancelButtonText,
-                  { color: isDarkMode ? '#fff' : '#666' }
-                ]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleSetCustomTime}
-                style={[styles.modalButton, styles.setButton]}
-              >
-                <Text style={styles.setButtonText}>Set</Text>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </SafeAreaView>
-  );
+        {screenTimeStatus?.authorization !== 'approved' &&
+          <Pressable disabled={saving} style={styles.button} onPress={() => run(requestIosPermission)}>
+            <Text style={styles.buttonText}>1. Grant Screen Time permission</Text>
+          </Pressable>}
+        <Pressable disabled={saving || screenTimeStatus?.authorization !== 'approved'}
+          style={styles.button} onPress={() => run(pickIosApps)}>
+          <Text style={styles.buttonText}>2. Choose apps with Apple's picker</Text>
+        </Pressable>
+        {blockerAvailable && <Text style={styles.confirmation}>Shield policy is connected to your reading goal. Test actual access on your device.</Text>}
+        {totalPicked > 0 &&
+          <Pressable disabled={saving} style={styles.danger} onPress={() =>
+            Alert.alert('Turn off restrictions?', 'This stops the daily re-lock schedule and removes this app’s Screen Time shields until you choose apps again.', [
+              { text:'Cancel',style:'cancel' },
+              { text:'Turn off',style:'destructive',onPress:()=>run(disableIosBlocking) },
+            ])}>
+            <Text style={styles.dangerText}>Emergency: turn off app restrictions</Text>
+          </Pressable>}
+      </View> : <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Distraction preferences</Text>
+        <Text style={styles.warning}>{isIos
+          ? 'Apple Screen Time is unavailable in this build. Expo Go cannot restrict other apps.'
+          : 'App blocking is not supported in this Android/web build yet. Preferences do not restrict other apps.'}</Text>
+        <Text style={styles.description}>Save a wish list of apps you'd like to use less:</Text>
+        {WISHLIST.map(name => <Pressable key={name} disabled={saving}
+          accessibilityRole="checkbox" accessibilityState={{checked:selectedApps.includes(name)}}
+          onPress={() => run(() => setSelectedApps(selectedApps.includes(name)
+            ? selectedApps.filter(a=>a!==name) : [...selectedApps,name]))}
+          style={styles.item}>
+          <Text style={styles.itemText}>{name}</Text>
+          <Text style={styles.check}>{selectedApps.includes(name) ? '☑' : '□'}</Text>
+        </Pressable>)}
+      </View>}
+      {error && <Text style={styles.error}>{error}</Text>}
+      <Text style={styles.footer}>Read to Unlock V2 · Development build · No verified device blocking yet</Text>
+    </ScrollView>
+  </SafeAreaView>;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  helpButton: {
-    padding: 8,
-  },
-  description: {
-    fontSize: 16,
-    color: '#666',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-    marginHorizontal: 16,
-    marginVertical: 12,
-    borderRadius: 12,
-  },
-  statItem: {
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  timeRequirementContainer: {
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-  },
-  timeRequirementLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  timeControl: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  timeValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  timeButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  customTimeButton: {
-    marginTop: 12,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  timeButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  permissionWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3E0',
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-  },
-  permissionText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 14,
-    color: '#666',
-  },
-  permissionButton: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  appList: {
-    paddingHorizontal: 16,
-  },
-  appItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  appInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  appName: {
-    marginLeft: 12,
-    fontSize: 16,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 24,
-    width: '80%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  timeInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginHorizontal: 8,
-  },
-  cancelButton: {
-    backgroundColor: '#f8f9fa',
-  },
-  setButton: {
-    backgroundColor: '#007AFF',
-  },
-  cancelButtonText: {
-    color: '#666',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  setButtonText: {
-    color: 'white',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-}); 
+const styles=StyleSheet.create({
+  screen:{flex:1,backgroundColor:'#F6F8FB'},content:{padding:20,gap:17,paddingBottom:55},
+  title:{fontSize:27,fontWeight:'800',color:'#152744'},
+  panel:{padding:18,backgroundColor:'#fff',borderRadius:16,gap:14},
+  panelTitle:{fontSize:19,fontWeight:'800',color:'#152744'},description:{color:'#66758C',fontSize:14,lineHeight:21},
+  warning:{color:'#805F2F',backgroundColor:'#FFF6E8',padding:12,borderRadius:10,lineHeight:19,fontSize:13},
+  confirmation:{color:'#286547',backgroundColor:'#EDF9F0',padding:12,borderRadius:10,lineHeight:19},
+  wrap:{flexDirection:'row',flexWrap:'wrap',gap:8},chip:{paddingVertical:10,paddingHorizontal:14,backgroundColor:'#F1F4FA',borderRadius:10},
+  selected:{backgroundColor:'#275EC8'},chipText:{fontWeight:'700',color:'#3E516D'},selectedText:{color:'#fff'},
+  item:{paddingVertical:14,borderBottomWidth:1,borderBottomColor:'#EDF0F5',flexDirection:'row',justifyContent:'space-between'},
+  itemText:{fontSize:16,color:'#263852'},check:{fontSize:23,color:'#2C61C6'},
+  button:{backgroundColor:'#2862C9',padding:15,borderRadius:12,alignItems:'center'},buttonText:{fontSize:14,color:'#fff',fontWeight:'700'},
+  danger:{borderColor:'#BB4141',borderWidth:1,padding:15,borderRadius:12,alignItems:'center'},
+  dangerText:{fontSize:14,color:'#A22F2F',fontWeight:'700'},
+  error:{color:'#B42318'},footer:{color:'#72809A',fontSize:12,lineHeight:18}
+});

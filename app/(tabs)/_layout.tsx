@@ -22,6 +22,8 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="lock-closed" size={24} color={color} />,
         }}
       />
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="explore" options={{ href: null }} />
     </Tabs>
   );
 }

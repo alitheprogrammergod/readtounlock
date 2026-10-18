@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const base = path.resolve(__dirname, '..');
+const load = p => fs.readFileSync(path.join(base, p), 'utf8');
+const swift = load('modules/rtu-screen-time/ios/RTUScreenTimeModule.swift');
+const picker = load('modules/rtu-screen-time/ios/RTUScreenTimePicker.swift');
+const service = load('services/ios-screen-time.ts');
+const rewards = load('contexts/reading-rewards.tsx');
+const config = JSON.parse(load('modules/rtu-screen-time/expo-module.config.json'));
+const expo = JSON.parse(load('app.json'));
+assert.deepEqual(config.platforms, ['ios']);
+assert(config.ios.modules.includes('RTUScreenTimeModule'));
+assert(expo.expo.ios.entitlements['com.apple.developer.family-controls'] === true);
+assert(!fs.existsSync(path.join(base, 'ios')), 'Legacy ios folder prevents EAS prebuild; remove it only on V2 branch.');
+assert(!swift.includes('bundleIdentifier:'));
+assert(!/store\.shield\.applicationCategories\s*=\s*\.all\b/.test(swift), 'Never shield all app categories');
+for (const name of ['getStatus', 'requestAuthorization', 'pickApps', 'setShielded']) {
+  assert(swift.includes('AsyncFunction("' + name + '")'), 'Native module missing ' + name);
+  assert(service.includes(name), 'JS wrapper missing ' + name);
+}
+assert(swift.includes('guard auth.authorizationStatus == .approved'));
+assert(swift.includes('shieldStore') === false, 'Use one consistent ManagedSettingsStore');
+assert(swift.includes('store.shield.applications ='));
+assert(swift.includes('store.shield.applicationCategories ='));
+assert(swift.includes('store.shield.webDomains ='));
+assert(swift.includes('isModalInPresentation = true'));
+assert(picker.includes('FamilyActivityPicker(selection: $choice)'));
+assert(service.includes("Constants.appOwnership !== 'expo'"), 'Expo Go must not claim native support');
+assert(service.includes('requireOptionalNativeModule'));
+assert(rewards.includes('controller.setPermission(false)'));
+assert(rewards.includes('iosScreenTime.setShielded'));
+assert(rewards.includes('iosScreenTime.setDailyMonitoring'));
+assert(rewards.includes('BLOCKING_ENABLED_KEY'));
+console.log('PASS: Native module, token picker, safe fallbacks, EAS prebuild and emergency disable source checks');

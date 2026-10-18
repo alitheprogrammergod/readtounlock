@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ReadingListProvider } from '../contexts/reading-list';
-import { AppLockProvider } from '../contexts/app-lock';
+import { ReadingRewardsProvider } from '../contexts/reading-rewards';
 import { ThemeProvider, useTheme } from '../contexts/theme';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -32,6 +32,8 @@ function RootLayoutNav() {
   return (
     <NavigationThemeProvider value={isDarkMode ? DarkTheme : DefaultTheme}>
       <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
@@ -44,11 +46,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <AppLockProvider>
+        <ReadingRewardsProvider>
           <ReadingListProvider>
             <RootLayoutNav />
           </ReadingListProvider>
-        </AppLockProvider>
+        </ReadingRewardsProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
