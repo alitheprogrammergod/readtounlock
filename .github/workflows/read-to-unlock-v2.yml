@@ -15,3 +15,4 @@ jobs:
       - run: npm ci
       - run: npx tsc -p tsconfig.v2-core.json
       - run: node --test tests/reading-unlock.test.cjs
+      - run: npx tsc --noEmit
