@@ -46,7 +46,7 @@ export default function OnboardingScreen() {
       <Text style={styles.description}>{step === 0
         ? 'Build a reading habit before spending your time scrolling. Setup takes less than a minute.'
         : step === 1 ? 'How many minutes would you like to read each day? You can change this later.'
-        : 'Pick apps you want to cut back on. Your choices are saved, but phone blocking is not active in this build.'}</Text>
+        : 'Choose apps you'd like to use less. On iPhone, you'll select the actual restricted apps using Apple's private picker in Focus settings.'}</Text>
 
       {step === 0 && <View style={styles.panel}>
         <Text style={styles.panelTitle}>What you can do today</Text>
@@ -70,7 +70,7 @@ export default function OnboardingScreen() {
           <Text style={styles.choiceHint}>{apps.includes(name) ? '✓' : '+'}</Text>
         </Pressable>)}
         <View style={styles.warning}>
-          <Text style={styles.warningText}>App restrictions are not enforced yet. Native Screen Time permissions and blocking still need testing on a physical device.</Text>
+          <Text style={styles.warningText}>These are preferences only. After setup, open Focus Settings to grant iPhone Screen Time permission and choose apps. Restrictions must still be tested on a device.</Text>
         </View>
       </>}
 

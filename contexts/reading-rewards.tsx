@@ -2,17 +2,23 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReadingUnlockController } from '../services/reading-unlock-controller';
 import { createUnlockState, getUnlockStatus, type UnlockStatus } from '../services/reading-unlock-engine';
+import { iosScreenTime, type ScreenTimeStatus } from '../services/ios-screen-time';
 
 const GOAL_KEY = '@rtu_v2_goal_minutes';
 const ONBOARDING_KEY = '@rtu_v2_onboarded';
+const BLOCKING_ENABLED_KEY = '@rtu_v2_ios_blocking_enabled';
 const DEFAULT_MINUTES = 15;
 const clock = { now: () => new Date() };
-// Native shields aren't ready yet. Never claim that selected apps are actually blocked.
-const unavailableShield = {
-  applyBlockedApps: async (_apps: string[]) => {
-    throw new Error('Native app blocking is not available in this build.');
+const nativeShield = {
+  applyBlockedApps: async (appIds: string[]) => {
+    // Only opaque-token selections already persisted by Apple's picker can be shielded.
+    // The string in the V2 controller is a sentinel, never an iOS bundle identifier.
+    await iosScreenTime.setShielded(appIds.includes('ios-screen-time-selection'));
   },
 };
+const INITIAL_SCREEN_TIME: ScreenTimeStatus | null = null;
+const hasSelection = (status: ScreenTimeStatus | null) =>
+  !!status && status.appCount + status.categoryCount + status.domainCount > 0;
 type RewardsContextValue = {
   ready: boolean;
   onboarded: boolean;
@@ -21,6 +27,10 @@ type RewardsContextValue = {
   selectedApps: string[];
   error: string | null;
   blockerAvailable: boolean;
+  screenTimeStatus: ScreenTimeStatus | null;
+  requestIosPermission: () => Promise<void>;
+  pickIosApps: () => Promise<void>;
+  disableIosBlocking: () => Promise<void>;
   finishOnboarding: (minutes: number, apps: string[]) => Promise<void>;
   setGoalMinutes: (minutes: number) => Promise<void>;
   setSelectedApps: (apps: string[]) => Promise<void>;
@@ -43,7 +53,7 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
   const controllerRef = useRef<ReadingUnlockController | null>(null);
   if (controllerRef.current === null) {
     controllerRef.current = new ReadingUnlockController(
-      AsyncStorage, unavailableShield, clock, { mode: 'daily', requiredSeconds: DEFAULT_MINUTES * 60 }
+      AsyncStorage, nativeShield, clock, { mode: 'daily', requiredSeconds: DEFAULT_MINUTES * 60 }
     );
   }
   const controller = controllerRef.current;
@@ -53,6 +63,30 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
   const [status, setStatus] = useState<UnlockStatus>(initialStatus);
   const [selectedApps, setApps] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [screenTimeStatus, setScreenTimeStatus] = useState<ScreenTimeStatus | null>(INITIAL_SCREEN_TIME);
+  const [blockingEnabled, setBlockingEnabled] = useState(true);
+
+  // Each startup/focus re-checks actual Apple authorization; never trust a cached
+  // permission bit left behind by a previous app installation or grant.
+  const reconcileNative = useCallback(async (): Promise<UnlockStatus> => {
+    const native = await iosScreenTime.getStatus();
+    setScreenTimeStatus(native);
+    const enabled = (await AsyncStorage.getItem(BLOCKING_ENABLED_KEY)) !== 'false';
+    setBlockingEnabled(enabled);
+    const usable = enabled && !!native && native.authorization === 'approved' && hasSelection(native);
+    if (!usable) {
+      const next = await controller.setPermission(false);
+      setStatus(next);
+      return next;
+    }
+    // React Native must not see Apple's private tokens. The native module owns them.
+    await controller.setPermission(false);
+    await controller.selectApps(['ios-screen-time-selection']);
+    const next = await controller.setPermission(true);
+    setStatus(next);
+    setApps(['iOS Screen Time selection']);
+    return next;
+  }, [controller]);
 
   useEffect(() => {
     let active = true;
@@ -63,11 +97,16 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
         ]);
         const parsed = savedMinutes === null ? DEFAULT_MINUTES : Number(savedMinutes);
         const minutes = Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 240 ? parsed : DEFAULT_MINUTES;
+        // Prevent an old cached permission from applying a shield before authorization
+        // is checked. Disabled clients can still keep tracking reading progress.
+        await controller.setPermission(false);
         await controller.setPolicy({ mode: 'daily', requiredSeconds: minutes * 60 });
-        const result = await controller.initialize();
+        await controller.initialize();
+        const next = await reconcileNative();
+        const apps = await controller.getSelectedApps();
         if (!active) return;
-        setStatus(result);
-        setApps((await controller.getSelectedApps()));
+        setStatus(next);
+        setApps(apps);
         setGoalState(minutes);
         setOnboarded(savedOnboarded === 'true');
       } catch (cause) {
@@ -78,13 +117,13 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
     }
     load();
     return () => { active = false; };
-  }, [controller]);
+  }, [controller, reconcileNative]);
 
   const refresh = useCallback(async () => {
-    const result = await controller.sync();
-    setStatus(result);
-    setApps(await controller.getSelectedApps());
-  }, [controller]);
+    // Sync authorization and shield policy when the app resumes / screens focus.
+    const next = await reconcileNative();
+    setStatus(next);
+  }, [reconcileNative]);
 
   const setGoalMinutes = useCallback(async (minutes: number) => {
     validateMinutes(minutes);
@@ -95,9 +134,49 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
   }, [controller, refresh]);
 
   const setSelectedApps = useCallback(async (apps: string[]) => {
+    // Names chosen during onboarding are preference labels only, not shield tokens.
+    if (hasSelection(screenTimeStatus) && screenTimeStatus?.authorization === 'approved') {
+      throw new Error("Use Apple's app picker to change actual iOS restrictions.");
+    }
     const result = await controller.selectApps(apps);
     setStatus(result);
     setApps(await controller.getSelectedApps());
+  }, [controller, screenTimeStatus]);
+
+  const requestIosPermission = useCallback(async () => {
+    setError(null);
+    await iosScreenTime.requestAuthorization();
+    await reconcileNative();
+  }, [reconcileNative]);
+
+  const pickIosApps = useCallback(async () => {
+    setError(null);
+    const native = await iosScreenTime.pickApps();
+    setScreenTimeStatus(native);
+    if (native.authorization === 'approved' && hasSelection(native)) {
+      await AsyncStorage.setItem(BLOCKING_ENABLED_KEY, 'true');
+      setBlockingEnabled(true);
+      await controller.setPermission(false);
+      await controller.selectApps(['ios-screen-time-selection']);
+      const result = await controller.setPermission(true);
+      setStatus(result);
+      setApps(['iOS Screen Time selection']);
+    } else {
+      await controller.setPermission(false);
+      await controller.selectApps([]);
+      setStatus(await controller.sync());
+      setApps([]);
+    }
+  }, [controller]);
+
+  const disableIosBlocking = useCallback(async () => {
+    // User-controlled emergency bypass, never silently revoke their permission.
+    await AsyncStorage.setItem(BLOCKING_ENABLED_KEY, 'false');
+    setBlockingEnabled(false);
+    await iosScreenTime.setShielded(false);
+    await controller.setPermission(false);
+    setStatus(await controller.sync());
+    setScreenTimeStatus(await iosScreenTime.getStatus());
   }, [controller]);
 
   const finishOnboarding = useCallback(async (minutes: number, apps: string[]) => {
@@ -114,7 +193,10 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
 
   return (
     <RewardsContext.Provider value={{
-      ready, onboarded, goalMinutes, status, selectedApps, error, blockerAvailable: false,
+      ready, onboarded, goalMinutes, status, selectedApps, error,
+      blockerAvailable: blockingEnabled && iosScreenTime.isInstalled() &&
+        screenTimeStatus?.authorization === 'approved' && hasSelection(screenTimeStatus) && status.permissionGranted,
+      screenTimeStatus, requestIosPermission, pickIosApps, disableIosBlocking,
       finishOnboarding, setGoalMinutes, setSelectedApps, recordReading, refresh,
     }}>
       {children}

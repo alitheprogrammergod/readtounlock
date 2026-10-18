@@ -28,8 +28,8 @@ export default function DashboardScreen() {
           ? 'Nice work. Your reading goal is complete.'
           : `${remaining} more minute${remaining === 1 ? '' : 's'} to finish your goal.`}</Text>
         <Text style={styles.disclaimer}>{blockerAvailable
-          ? 'App protection enabled.'
-          : 'Reading tracking only. Social apps are not blocked yet.'}</Text>
+          ? 'Native shield requests connected. Verify on an iPhone; background re-locking is not yet implemented.'
+          : 'Reading tracking is active. iPhone app blocking needs Screen Time setup and device verification.'}</Text>
       </View>
 
       <Link href="/(book)/scan" asChild><Pressable style={styles.cta}><Text style={styles.ctaText}>+ Scan a book</Text></Pressable></Link>
@@ -45,7 +45,7 @@ export default function DashboardScreen() {
         <Text style={styles.muted}>{selectedApps.length
           ? selectedApps.join(', ')
           : 'None selected yet. Choose the apps you want to cut back on.'}</Text>
-        {!blockerAvailable && <Text style={styles.notice}>Your selections are saved for a future native blocker. They do not restrict apps on this device.</Text>}
+        {!blockerAvailable && <Text style={styles.notice}>Choose apps using Apple Screen Time in Focus settings. Preferences alone do not restrict apps.</Text>}
       </View>
     </ScrollView>
   </SafeAreaView>;
