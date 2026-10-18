@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { View, Text, StyleSheet, Pressable, Image, Dimensions, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Dimensions, ActivityIndicator, ScrollView, Alert, Modal, KeyboardAvoidingView, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useReadingList } from '../../contexts/reading-list';
+import { useTheme } from '../../contexts/theme';
 
 type ScanMode = 'photo' | 'barcode';
 
@@ -44,13 +45,16 @@ export default function ScanScreen() {
   const [type, setType] = useState<'front' | 'back'>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [photo, setPhoto] = useState<string | null>(null);
-  const [scanMode, setScanMode] = useState<ScanMode>('photo');
+  const [scanMode, setScanMode] = useState<ScanMode>('barcode');
   const [isScanning, setIsScanning] = useState(false);
   const [scannedData, setScannedData] = useState<string | null>(null);
   const [scanAttempts, setScanAttempts] = useState(0);
+  const [showPageCountModal, setShowPageCountModal] = useState(false);
+  const [manualPageCount, setManualPageCount] = useState('');
   const cameraRef = useRef<CameraView>(null);
   const scanTimeoutRef = useRef<NodeJS.Timeout>();
   const [bookDetails, setBookDetails] = useState<BookDetails | null>(null);
+  const { isDarkMode } = useTheme();
 
   useEffect(() => {
     requestPermission();
@@ -108,7 +112,7 @@ export default function ScanScreen() {
       }
 
       const book = bookData.items[0].volumeInfo;
-      setBookDetails({
+      const details = {
         title: book.title,
         authors: book.authors || [],
         description: book.description || 'No description available',
@@ -116,7 +120,14 @@ export default function ScanScreen() {
         coverUrl: book.imageLinks?.thumbnail || '',
         publisher: book.publisher || 'Unknown publisher',
         publishedDate: book.publishedDate || 'Unknown date',
-      });
+      };
+
+      setBookDetails(details);
+      
+      // Show page count modal if pageCount is 0
+      if (details.pageCount === 0) {
+        setShowPageCountModal(true);
+      }
 
     } catch (error) {
       console.error('Error processing barcode:', error);
@@ -133,12 +144,14 @@ export default function ScanScreen() {
     if (!bookDetails) return;
 
     try {
+      const finalPageCount = bookDetails.pageCount === 0 ? parseInt(manualPageCount) || 0 : bookDetails.pageCount;
+      
       await addBook({
         isbn: scannedData || '',
         title: bookDetails.title,
         authors: bookDetails.authors,
         description: bookDetails.description,
-        pageCount: bookDetails.pageCount,
+        pageCount: finalPageCount,
         coverUrl: bookDetails.coverUrl,
         publisher: bookDetails.publisher,
         publishedDate: bookDetails.publishedDate,
@@ -158,6 +171,7 @@ export default function ScanScreen() {
               setBookDetails(null);
               setIsScanning(false);
               setScannedData(null);
+              setManualPageCount('');
             },
           },
         ]
@@ -242,7 +256,12 @@ export default function ScanScreen() {
               <Text style={styles.publisher}>
                 {bookDetails.publisher} ({bookDetails.publishedDate})
               </Text>
-              <Text style={styles.pageCount}>{bookDetails.pageCount} pages</Text>
+              <Text style={styles.pageCount}>
+                {bookDetails.pageCount === 0 ? 'Page count not available' : `${bookDetails.pageCount} pages`}
+                {bookDetails.pageCount === 0 && (
+                  <Text style={styles.pageCountNote}> (you'll be asked to enter it manually)</Text>
+                )}
+              </Text>
               <Text style={styles.description}>{bookDetails.description}</Text>
             </View>
             {scannedData && isInReadingList(scannedData) ? (
@@ -370,6 +389,82 @@ export default function ScanScreen() {
           </View>
         </>
       )}
+
+      <Modal
+        visible={showPageCountModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPageCountModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={[
+            styles.modalContent,
+            { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
+          ]}>
+            <Text style={[
+              styles.modalTitle,
+              { color: isDarkMode ? '#fff' : '#000' }
+            ]}>Enter Page Count</Text>
+            <Text style={[
+              styles.modalSubtitle,
+              { color: isDarkMode ? '#999' : '#666' }
+            ]}>
+              The page count wasn't available. Please enter it manually:
+            </Text>
+            <TextInput
+              style={[
+                styles.pageInput,
+                { 
+                  borderColor: isDarkMode ? '#333' : '#ddd',
+                  backgroundColor: isDarkMode ? '#000' : '#fff',
+                  color: isDarkMode ? '#fff' : '#000'
+                }
+              ]}
+              keyboardType="numeric"
+              value={manualPageCount}
+              onChangeText={setManualPageCount}
+              placeholder="Enter number of pages"
+              placeholderTextColor={isDarkMode ? '#666' : '#999'}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setShowPageCountModal(false)}
+                style={[
+                  styles.modalButton,
+                  styles.cancelButton,
+                  { backgroundColor: isDarkMode ? '#333' : '#f8f9fa' }
+                ]}
+              >
+                <Text style={[
+                  styles.cancelButtonText,
+                  { color: isDarkMode ? '#fff' : '#666' }
+                ]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const pages = parseInt(manualPageCount);
+                  if (pages > 0) {
+                    setBookDetails(prev => prev ? {
+                      ...prev,
+                      pageCount: pages
+                    } : null);
+                    setShowPageCountModal(false);
+                  } else {
+                    Alert.alert('Invalid Input', 'Please enter a valid number of pages.');
+                  }
+                }}
+                style={[styles.modalButton, styles.setButton]}
+              >
+                <Text style={styles.setButtonText}>Set</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -628,5 +723,67 @@ const styles = StyleSheet.create({
   scanAgainButton: {
     backgroundColor: '#666',
     marginTop: 10,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  pageInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginHorizontal: 8,
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+  },
+  setButton: {
+    backgroundColor: '#007AFF',
+  },
+  cancelButtonText: {
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  setButtonText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  pageCountNote: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
 }); 

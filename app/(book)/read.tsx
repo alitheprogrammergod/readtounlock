@@ -62,7 +62,7 @@ export default function ReadScreen() {
     }
 
     // Only start a new interval if we're reading and not paused
-    if (isReading && !isPaused) {
+    if (isReading && !isPaused && startTime) {
       console.log('Starting timer...');
       intervalRef.current = setInterval(() => {
         console.log('Timer tick');
@@ -83,7 +83,7 @@ export default function ReadScreen() {
         intervalRef.current = null;
       }
     };
-  }, [isReading, isPaused]);
+  }, [isReading, isPaused, startTime]);
 
   const loadSession = async () => {
     try {
@@ -93,8 +93,8 @@ export default function ReadScreen() {
         if (session.bookId === id) {
           setElapsedTime(session.elapsedTime);
           setStartTime(new Date(session.startTime));
-          setIsReading(true);
-          setIsPaused(session.isPaused);
+          setIsReading(false);
+          setIsPaused(true);
         }
       }
     } catch (error) {
@@ -317,18 +317,52 @@ export default function ReadScreen() {
               </View>
             </View>
           ) : (
-            <View style={styles.pageSectionPrompt}>
-              <Text style={styles.pageLabel}>What page did you reach?</Text>
+            <View style={[
+              styles.pageSectionPrompt,
+              { backgroundColor: isDarkMode ? '#1c1c1e' : '#f8f9fa' }
+            ]}>
+              <Text style={[
+                styles.pageLabel,
+                { color: isDarkMode ? '#fff' : '#000' }
+              ]}>What page did you reach?</Text>
               <TextInput
                 ref={pageInputRef}
-                style={styles.pageInput}
+                style={[
+                  styles.pageInput,
+                  {
+                    borderColor: isDarkMode ? '#007AFF' : '#007AFF',
+                    backgroundColor: isDarkMode ? '#000' : '#fff',
+                    color: isDarkMode ? '#fff' : '#000'
+                  }
+                ]}
                 value={tempPage}
                 onChangeText={setTempPage}
                 keyboardType="number-pad"
                 returnKeyType="done"
                 onSubmitEditing={handleSaveSession}
               />
-              <Text style={styles.totalPages}>of {book.pageCount} pages</Text>
+              <Text style={[
+                styles.totalPages,
+                { color: isDarkMode ? '#999' : '#666' }
+              ]}>of {book.pageCount} pages</Text>
+              
+              <View style={styles.pageInputButtons}>
+                <Pressable 
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={() => {
+                    setShowPagePrompt(false);
+                    setTempPage(currentPage.toString());
+                  }}
+                >
+                  <Text style={[styles.buttonText, { color: isDarkMode ? '#fff' : '#000' }]}>Cancel</Text>
+                </Pressable>
+                <Pressable 
+                  style={[styles.button, styles.saveButton]}
+                  onPress={handleSaveSession}
+                >
+                  <Text style={styles.buttonText}>Save Progress</Text>
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -521,7 +555,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
     width: '100%',
-    backgroundColor: '#f8f9fa',
     padding: 24,
     borderRadius: 16,
   },
@@ -589,5 +622,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 24,
+  },
+  pageInputButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+    width: '100%',
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#007AFF',
   },
 }); 

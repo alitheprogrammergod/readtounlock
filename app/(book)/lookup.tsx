@@ -1,7 +1,9 @@
-import { View, Text, StyleSheet, Pressable, Image, TextInput, ActivityIndicator } from 'react-native';
-import { Link, router } from 'expo-router';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { router } from 'expo-router';
+import { useReadingList } from '../../contexts/reading-list';
+import { useTheme } from '../../contexts/theme';
 
 interface BookDetails {
   title: string;
@@ -14,34 +16,33 @@ interface BookDetails {
 }
 
 export default function BookLookupScreen() {
+  const { addBook, isInReadingList } = useReadingList();
   const [isbn, setIsbn] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [bookDetails, setBookDetails] = useState<BookDetails | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPageCountModal, setShowPageCountModal] = useState(false);
+  const [manualPageCount, setManualPageCount] = useState('');
+  const { isDarkMode } = useTheme();
 
   async function handleLookup() {
-    if (!isbn.trim()) {
-      setError('Please enter an ISBN');
+    if (!isbn) {
+      Alert.alert('Error', 'Please enter an ISBN');
       return;
     }
 
     setIsLoading(true);
-    setError(null);
-    setBookDetails(null);
-
     try {
       const response = await fetch(
-        `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn.trim()}`
+        `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`
       );
       const data = await response.json();
 
       if (!data.items || data.items.length === 0) {
-        setError('No book found with this ISBN');
-        return;
+        throw new Error('No book found with this ISBN');
       }
 
       const book = data.items[0].volumeInfo;
-      setBookDetails({
+      const details = {
         title: book.title,
         authors: book.authors || [],
         description: book.description || 'No description available',
@@ -49,87 +50,229 @@ export default function BookLookupScreen() {
         coverUrl: book.imageLinks?.thumbnail || '',
         publisher: book.publisher || 'Unknown publisher',
         publishedDate: book.publishedDate || 'Unknown date',
-      });
+      };
+
+      setBookDetails(details);
+      
+      // Show page count modal if pageCount is 0
+      if (details.pageCount === 0) {
+        setShowPageCountModal(true);
+      }
+
     } catch (error) {
-      console.error('Error fetching book details:', error);
-      setError('Failed to fetch book details. Please try again.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to look up book');
     } finally {
       setIsLoading(false);
     }
   }
 
+  async function handleAddToReadingList() {
+    if (!bookDetails) return;
+
+    try {
+      const finalPageCount = bookDetails.pageCount === 0 ? parseInt(manualPageCount) || 0 : bookDetails.pageCount;
+      
+      await addBook({
+        isbn,
+        title: bookDetails.title,
+        authors: bookDetails.authors,
+        description: bookDetails.description,
+        pageCount: finalPageCount,
+        coverUrl: bookDetails.coverUrl,
+        publisher: bookDetails.publisher,
+        publishedDate: bookDetails.publishedDate,
+      });
+
+      Alert.alert(
+        'Success',
+        'Book added to your reading list!',
+        [
+          {
+            text: 'View Reading List',
+            onPress: () => router.replace('/(tabs)/dashboard'),
+          },
+          {
+            text: 'Add Another',
+            onPress: () => {
+              setBookDetails(null);
+              setIsbn('');
+              setManualPageCount('');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add book to reading list');
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>← Back</Text>
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={[
+            styles.input,
+            { 
+              backgroundColor: isDarkMode ? '#000' : '#fff',
+              color: isDarkMode ? '#fff' : '#000',
+              borderColor: isDarkMode ? '#333' : '#ddd'
+            }
+          ]}
+          placeholder="Enter ISBN"
+          placeholderTextColor={isDarkMode ? '#666' : '#999'}
+          value={isbn}
+          onChangeText={setIsbn}
+          keyboardType="numeric"
+          autoFocus
+        />
+        <Pressable
+          style={[styles.button, styles.lookupButton]}
+          onPress={handleLookup}
+          disabled={isLoading}
+        >
+          <Text style={styles.buttonText}>
+            {isLoading ? 'Looking up...' : 'Look up Book'}
+          </Text>
         </Pressable>
-        <Text style={styles.title}>Book Lookup</Text>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter ISBN (e.g., 9780307474278)"
-            value={isbn}
-            onChangeText={setIsbn}
-            keyboardType="numeric"
-            maxLength={13}
-          />
-          <Pressable
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleLookup}
-            disabled={isLoading}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Searching...' : 'Look Up Book'}
-            </Text>
-          </Pressable>
-        </View>
-
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Searching for book...</Text>
-          </View>
-        )}
-
-        {bookDetails && (
-          <View style={styles.bookDetails}>
-            {bookDetails.coverUrl ? (
-              <Image
-                source={{ uri: bookDetails.coverUrl }}
-                style={styles.coverImage}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={styles.noCover}>
-                <Text style={styles.noCoverText}>No cover available</Text>
-              </View>
+      {bookDetails && (
+        <View style={styles.bookDetails}>
+          <Text style={[
+            styles.bookTitle,
+            { color: isDarkMode ? '#fff' : '#000' }
+          ]}>
+            {bookDetails.title}
+          </Text>
+          <Text style={[
+            styles.authors,
+            { color: isDarkMode ? '#ccc' : '#666' }
+          ]}>
+            By {bookDetails.authors.join(', ') || 'Unknown Author'}
+          </Text>
+          <Text style={[
+            styles.publisher,
+            { color: isDarkMode ? '#ccc' : '#666' }
+          ]}>
+            {bookDetails.publisher} ({bookDetails.publishedDate})
+          </Text>
+          <Text style={[
+            styles.pageCount,
+            { color: isDarkMode ? '#ccc' : '#666' }
+          ]}>
+            {bookDetails.pageCount === 0 ? 'Page count not available' : `${bookDetails.pageCount} pages`}
+            {bookDetails.pageCount === 0 && (
+              <Text style={styles.pageCountNote}> (you'll be asked to enter it manually)</Text>
             )}
-            <View style={styles.detailsText}>
-              <Text style={styles.bookTitle}>{bookDetails.title}</Text>
-              <Text style={styles.authors}>
-                By {bookDetails.authors.join(', ') || 'Unknown Author'}
+          </Text>
+          <Text style={[
+            styles.description,
+            { color: isDarkMode ? '#ccc' : '#666' }
+          ]}>
+            {bookDetails.description}
+          </Text>
+
+          {isInReadingList(isbn) ? (
+            <View style={styles.alreadyAddedContainer}>
+              <Text style={[
+                styles.alreadyAddedText,
+                { color: isDarkMode ? '#ccc' : '#666' }
+              ]}>
+                This book is already in your reading list
               </Text>
-              <Text style={styles.publisher}>
-                {bookDetails.publisher} ({bookDetails.publishedDate})
-              </Text>
-              <Text style={styles.pageCount}>{bookDetails.pageCount} pages</Text>
-              <Text style={styles.description} numberOfLines={4}>
-                {bookDetails.description}
-              </Text>
+              <Pressable
+                style={[styles.button, styles.viewListButton]}
+                onPress={() => router.replace('/(tabs)/dashboard')}
+              >
+                <Text style={styles.buttonText}>View Reading List</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              style={[styles.button, styles.confirmButton]}
+              onPress={handleAddToReadingList}
+            >
+              <Text style={styles.buttonText}>Add to Reading List</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      <Modal
+        visible={showPageCountModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPageCountModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={[
+            styles.modalContent,
+            { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }
+          ]}>
+            <Text style={[
+              styles.modalTitle,
+              { color: isDarkMode ? '#fff' : '#000' }
+            ]}>Enter Page Count</Text>
+            <Text style={[
+              styles.modalSubtitle,
+              { color: isDarkMode ? '#999' : '#666' }
+            ]}>
+              The page count wasn't available. Please enter it manually:
+            </Text>
+            <TextInput
+              style={[
+                styles.pageInput,
+                { 
+                  borderColor: isDarkMode ? '#333' : '#ddd',
+                  backgroundColor: isDarkMode ? '#000' : '#fff',
+                  color: isDarkMode ? '#fff' : '#000'
+                }
+              ]}
+              keyboardType="numeric"
+              value={manualPageCount}
+              onChangeText={setManualPageCount}
+              placeholder="Enter number of pages"
+              placeholderTextColor={isDarkMode ? '#666' : '#999'}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setShowPageCountModal(false)}
+                style={[
+                  styles.modalButton,
+                  styles.cancelButton,
+                  { backgroundColor: isDarkMode ? '#333' : '#f8f9fa' }
+                ]}
+              >
+                <Text style={[
+                  styles.cancelButtonText,
+                  { color: isDarkMode ? '#fff' : '#666' }
+                ]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const pages = parseInt(manualPageCount);
+                  if (pages > 0) {
+                    setBookDetails(prev => prev ? {
+                      ...prev,
+                      pageCount: pages
+                    } : null);
+                    setShowPageCountModal(false);
+                  } else {
+                    Alert.alert('Invalid Input', 'Please enter a valid number of pages.');
+                  }
+                }}
+                style={[styles.modalButton, styles.setButton]}
+              >
+                <Text style={styles.setButtonText}>Set</Text>
+              </Pressable>
             </View>
           </View>
-        )}
-      </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -137,119 +280,131 @@ export default function BookLookupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  backButton: {
-    marginRight: 10,
-  },
-  backText: {
-    fontSize: 16,
-    color: '#007AFF',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
+    padding: 16,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
-    padding: 15,
+    padding: 12,
     fontSize: 16,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
+    padding: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  lookupButton: {
+    backgroundColor: '#007AFF',
+  },
+  confirmButton: {
+    backgroundColor: '#34C759',
+    marginTop: 16,
+  },
+  viewListButton: {
+    backgroundColor: '#007AFF',
+    marginTop: 8,
   },
   buttonText: {
-    color: '#fff',
+    color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
-  errorContainer: {
-    backgroundColor: '#ffebee',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  errorText: {
-    color: '#c62828',
-    fontSize: 14,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
-    fontSize: 14,
-  },
   bookDetails: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 15,
-    marginTop: 20,
-  },
-  coverImage: {
-    width: '100%',
-    height: 200,
-    marginBottom: 15,
-  },
-  noCover: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#eee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  noCoverText: {
-    color: '#666',
-    fontSize: 14,
-  },
-  detailsText: {
-    gap: 8,
+    marginTop: 16,
   },
   bookTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '600',
+    marginBottom: 8,
   },
   authors: {
     fontSize: 16,
-    color: '#666',
+    marginBottom: 4,
   },
   publisher: {
     fontSize: 14,
-    color: '#666',
+    marginBottom: 4,
   },
   pageCount: {
     fontSize: 14,
-    color: '#666',
+    marginBottom: 8,
   },
   description: {
     fontSize: 14,
     lineHeight: 20,
-    marginTop: 10,
+  },
+  alreadyAddedContainer: {
+    marginTop: 16,
+  },
+  alreadyAddedText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  pageInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginHorizontal: 8,
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+  },
+  setButton: {
+    backgroundColor: '#007AFF',
+  },
+  cancelButtonText: {
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  setButtonText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  pageCountNote: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
 }); 

@@ -14,6 +14,7 @@ export interface InstalledApp {
 const LOCKED_APPS_KEY = '@locked_apps';
 const READING_PROGRESS_KEY = '@reading_progress';
 const LAST_NOTIFICATION_KEY = '@last_notification';
+const REQUIRED_MINUTES_KEY = '@required_minutes';
 
 interface ReadingProgress {
   totalMinutesToday: number;
@@ -57,11 +58,11 @@ class AppManager {
         
         // Re-apply locks after loading
         if (Platform.OS === 'android') {
-          for (const packageName of this.lockedApps) {
+          for (const packageName of Array.from(this.lockedApps)) {
             await appLocker.blockApp(packageName);
           }
         } else if (Platform.OS === 'ios') {
-          await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps), this.requiredReadingMinutes);
+          await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps));
         }
       }
 
@@ -70,6 +71,12 @@ class AppManager {
       if (progressJson) {
         this.readingProgress = JSON.parse(progressJson);
         this.checkAndResetDailyProgress();
+      }
+
+      // Load required minutes
+      const requiredMinutesJson = await AsyncStorage.getItem(REQUIRED_MINUTES_KEY);
+      if (requiredMinutesJson) {
+        this.requiredReadingMinutes = JSON.parse(requiredMinutesJson);
       }
 
       // Load last notification
@@ -88,6 +95,7 @@ class AppManager {
     try {
       await AsyncStorage.setItem(LOCKED_APPS_KEY, JSON.stringify(Array.from(this.lockedApps)));
       await AsyncStorage.setItem(READING_PROGRESS_KEY, JSON.stringify(this.readingProgress));
+      await AsyncStorage.setItem(REQUIRED_MINUTES_KEY, JSON.stringify(this.requiredReadingMinutes));
       if (this.lastNotification) {
         await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, JSON.stringify(this.lastNotification));
       }
@@ -140,7 +148,7 @@ class AppManager {
     if (Platform.OS === 'android') {
       await appLocker.blockApp(packageName);
     } else if (Platform.OS === 'ios') {
-      await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps), this.requiredReadingMinutes);
+      await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps));
     }
     await this.saveState();
   }
@@ -152,7 +160,7 @@ class AppManager {
     } else if (Platform.OS === 'ios') {
       const remainingApps = Array.from(this.lockedApps);
       if (remainingApps.length > 0) {
-        await appLockerIOS.setAppRestrictions(remainingApps, this.requiredReadingMinutes);
+        await appLockerIOS.setAppRestrictions(remainingApps);
       } else {
         await appLockerIOS.removeAppRestrictions([packageName]);
       }
@@ -245,8 +253,9 @@ class AppManager {
 
   public async updateReadingTimeRequirement(minutes: number): Promise<void> {
     this.requiredReadingMinutes = minutes;
+    await this.saveState();
     if (Platform.OS === 'ios' && this.lockedApps.size > 0) {
-      await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps), minutes);
+      await appLockerIOS.setAppRestrictions(Array.from(this.lockedApps));
     }
   }
 
