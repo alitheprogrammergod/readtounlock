@@ -14,7 +14,7 @@ assert(config.ios.modules.includes('RTUScreenTimeModule'));
 assert(expo.expo.ios.entitlements['com.apple.developer.family-controls'] === true);
 assert(!fs.existsSync(path.join(base, 'ios')), 'Legacy ios folder prevents EAS prebuild; remove it only on V2 branch.');
 assert(!swift.includes('bundleIdentifier:'));
-assert(!/store\\.shield\\.applicationCategories\\s*=\\s*\\.all\\b/.test(swift), 'Never shield all app categories');
+assert(!/store\.shield\.applicationCategories\s*=\s*\.all\b/.test(swift), 'Never shield all app categories');
 for (const name of ['getStatus', 'requestAuthorization', 'pickApps', 'setShielded']) {
   assert(swift.includes('AsyncFunction("' + name + '")'), 'Native module missing ' + name);
   assert(service.includes(name), 'JS wrapper missing ' + name);
