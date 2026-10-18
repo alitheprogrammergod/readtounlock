@@ -43,8 +43,10 @@ export default function DistractionsScreen() {
         <Text style={styles.panelTitle}>iPhone Screen Time</Text>
         <Text style={styles.description}>Apple permission: {screenTimeStatus?.authorization ?? 'Checking…'}</Text>
         <Text style={styles.description}>Chosen in Apple's private picker: {totalPicked} items</Text>
+        <Text style={styles.description}>Daily schedule: {screenTimeStatus?.dailyScheduleRegistered ? 'registered (unverified)' : 'not registered'}</Text>
+        <Text style={styles.description}>Next-day relock monitoring: {screenTimeStatus?.monitoringEnabled ? 'requested' : 'off'}</Text>
         <Text style={styles.warning}>
-          Experimental integration. App shielding must be checked on a real iPhone. Automatic re-locking at midnight is not implemented yet.
+          Experimental integration. App shielding must be checked on a real iPhone. Daily re-locking is scheduled using Apple's Device Activity extension. Real background delivery has not been verified on an iPhone.
         </Text>
         {screenTimeStatus?.authorization !== 'approved' &&
           <Pressable disabled={saving} style={styles.button} onPress={() => run(requestIosPermission)}>
@@ -57,7 +59,7 @@ export default function DistractionsScreen() {
         {blockerAvailable && <Text style={styles.confirmation}>Shield policy is connected to your reading goal. Test actual access on your device.</Text>}
         {totalPicked > 0 &&
           <Pressable disabled={saving} style={styles.danger} onPress={() =>
-            Alert.alert('Turn off restrictions?', 'This removes this app’s Screen Time shields until you choose apps again.', [
+            Alert.alert('Turn off restrictions?', 'This stops the daily re-lock schedule and removes this app’s Screen Time shields until you choose apps again.', [
               { text:'Cancel',style:'cancel' },
               { text:'Turn off',style:'destructive',onPress:()=>run(disableIosBlocking) },
             ])}>

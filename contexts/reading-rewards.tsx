@@ -75,10 +75,17 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
     setBlockingEnabled(enabled);
     const usable = enabled && !!native && native.authorization === 'approved' && hasSelection(native);
     if (!usable) {
+      // A previously configured native schedule must not outlive user opt-out
+      // or revoked authorization. Disabling monitoring also clears its shields.
+      if (native?.monitoringEnabled) await iosScreenTime.setDailyMonitoring(false);
       const next = await controller.setPermission(false);
       setStatus(next);
       return next;
     }
+    // Native schedule runs independently of JS at the next local midnight.
+    // Failure must propagate: never display a working blocker if scheduling failed.
+    const schedule = await iosScreenTime.setDailyMonitoring(true);
+    setScreenTimeStatus(schedule);
     // React Native must not see Apple's private tokens. The native module owns them.
     await controller.setPermission(false);
     await controller.selectApps(['ios-screen-time-selection']);
@@ -154,6 +161,8 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
     const native = await iosScreenTime.pickApps();
     setScreenTimeStatus(native);
     if (native.authorization === 'approved' && hasSelection(native)) {
+      const schedule = await iosScreenTime.setDailyMonitoring(true);
+      setScreenTimeStatus(schedule);
       await AsyncStorage.setItem(BLOCKING_ENABLED_KEY, 'true');
       setBlockingEnabled(true);
       await controller.setPermission(false);
@@ -162,6 +171,7 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
       setStatus(result);
       setApps(['iOS Screen Time selection']);
     } else {
+      await iosScreenTime.setDailyMonitoring(false);
       await controller.setPermission(false);
       await controller.selectApps([]);
       setStatus(await controller.sync());
@@ -173,7 +183,7 @@ export function ReadingRewardsProvider({ children }: { children: React.ReactNode
     // User-controlled emergency bypass, never silently revoke their permission.
     await AsyncStorage.setItem(BLOCKING_ENABLED_KEY, 'false');
     setBlockingEnabled(false);
-    await iosScreenTime.setShielded(false);
+    await iosScreenTime.setDailyMonitoring(false);
     await controller.setPermission(false);
     setStatus(await controller.sync());
     setScreenTimeStatus(await iosScreenTime.getStatus());

@@ -20,3 +20,16 @@ jobs:
       - run: swiftc -frontend -parse modules/rtu-screen-time/ios/*.swift
       - run: npx expo-modules-autolinking resolve --platform ios > native-autolinking.json
       - run: grep -q RTUScreenTime native-autolinking.json
+      - run: swiftc -frontend -parse extensions/rtu-daily-monitor/DeviceActivityMonitorExtension.swift
+      - run: node scripts/check-daily-monitor.cjs
+
+  generated-ios-project:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - run: node scripts/check-daily-monitor.cjs --generated

@@ -18,7 +18,10 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "entitlements": {
-        "com.apple.developer.family-controls": true
+        "com.apple.developer.family-controls": true,
+        "com.apple.security.application-groups": [
+          "group.com.anonymous.readtounlock"
+        ]
       }
     },
     "android": {
@@ -65,7 +68,8 @@
           "icon": "./assets/images/adaptive-icon.png",
           "color": "#ffffff"
         }
-      ]
+      ],
+      "./plugins/withDailyMonitor"
     ],
     "experiments": {
       "typedRoutes": true
@@ -75,7 +79,25 @@
         "origin": false
       },
       "eas": {
-        "projectId": "0b0a1bfb-dec8-4096-80b4-561692b83151"
+        "projectId": "0b0a1bfb-dec8-4096-80b4-561692b83151",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "RTUDailyMonitor",
+                  "bundleIdentifier": "com.anonymous.readtounlock.daily-monitor",
+                  "entitlements": {
+                    "com.apple.developer.family-controls": true,
+                    "com.apple.security.application-groups": [
+                      "group.com.anonymous.readtounlock"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
       }
     }
   }

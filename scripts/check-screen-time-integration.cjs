@@ -19,7 +19,7 @@ for (const name of ['getStatus', 'requestAuthorization', 'pickApps', 'setShielde
   assert(swift.includes('AsyncFunction("' + name + '")'), 'Native module missing ' + name);
   assert(service.includes(name), 'JS wrapper missing ' + name);
 }
-assert(swift.includes('guard !shouldBlock || center.authorizationStatus == .approved'));
+assert(swift.includes('guard auth.authorizationStatus == .approved'));
 assert(swift.includes('shieldStore') === false, 'Use one consistent ManagedSettingsStore');
 assert(swift.includes('store.shield.applications ='));
 assert(swift.includes('store.shield.applicationCategories ='));
@@ -30,5 +30,6 @@ assert(service.includes("Constants.appOwnership !== 'expo'"), 'Expo Go must not 
 assert(service.includes('requireOptionalNativeModule'));
 assert(rewards.includes('controller.setPermission(false)'));
 assert(rewards.includes('iosScreenTime.setShielded'));
+assert(rewards.includes('iosScreenTime.setDailyMonitoring'));
 assert(rewards.includes('BLOCKING_ENABLED_KEY'));
 console.log('PASS: Native module, token picker, safe fallbacks, EAS prebuild and emergency disable source checks');
