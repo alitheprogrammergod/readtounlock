@@ -46,7 +46,7 @@ export default function OnboardingScreen() {
       <Text style={styles.description}>{step === 0
         ? 'Build a reading habit before spending your time scrolling. Setup takes less than a minute.'
         : step === 1 ? 'How many minutes would you like to read each day? You can change this later.'
-        : 'Choose apps you'd like to use less. On iPhone, you'll select the actual restricted apps using Apple's private picker in Focus settings.'}</Text>
+        : "Choose apps you'd like to use less. On iPhone, you'll select the actual restricted apps using Apple's private picker in Focus settings."}</Text>
 
       {step === 0 && <View style={styles.panel}>
         <Text style={styles.panelTitle}>What you can do today</Text>
