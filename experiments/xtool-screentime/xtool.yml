@@ -1,0 +1,5 @@
+version: 1
+bundleID: com.alitheprogrammergod.readtounlock.screentimelab
+product: ScreenTimeLab
+entitlementsPath: App.entitlements
+infoPath: Info.plist
